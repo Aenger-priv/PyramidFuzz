@@ -66,12 +66,17 @@ public:
         preHighPass.resize(static_cast<size_t>(channels));
         preLowPass.resize(static_cast<size_t>(channels));
         postLowPass.resize(static_cast<size_t>(channels));
+        postHighPass.resize(static_cast<size_t>(channels));
 
         for (auto channel = 0; channel < channels; ++channel)
         {
             preHighPass[static_cast<size_t>(channel)].setCoefficients(makeHighPass(sampleRate, 72.0f, 0.76f));
             preLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 6200.0f, 0.72f));
             postLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 3600.0f, 0.88f));
+            // C3 is the output coupling capacitor of this gain stage. The
+            // blocker also prevents asymmetrical germanium clipping from
+            // depositing DC into the passive tone network.
+            postHighPass[static_cast<size_t>(channel)].setCoefficients(makeHighPass(sampleRate, 24.0f, 0.70f));
         }
 
         reset();
@@ -87,6 +92,9 @@ public:
 
         for (auto& filter : postLowPass)
             filter.reset();
+
+        for (auto& filter : postHighPass)
+            filter.reset();
     }
 
     float processSample(int channel, float sample, float sustain, float modeMorph)
@@ -97,17 +105,20 @@ public:
         const auto siliconDrive = filtered * (2.6f + sustain * 3.8f);
         const auto germaniumDrive = filtered * (2.2f + sustain * 3.2f);
 
-        const auto off = 0.92f * kneeClip(offDrive, 0.82f, 1.8f, 0.98f);
+        // In bypass mode, only the diode feedback is removed. The transistor
+        // stage still has finite headroom, but is appreciably more open than a
+        // diode-limited path.
+        const auto off = 0.92f * std::tanh(0.92f * offDrive);
 
         // Silicon mode uses a harder knee and a brighter, tighter ceiling.
-        const auto silicon = kneeClip(siliconDrive + 0.03f * siliconDrive * siliconDrive,
-                                      0.38f,
+        const auto silicon = kneeClip(siliconDrive,
+                                      0.42f,
                                       6.2f,
                                       0.88f);
 
         // Germanium mode clips earlier with a softer knee and slight asymmetry for squish.
-        const auto germanium = 0.96f * kneeClip(germaniumDrive + 0.10f * germaniumDrive * germaniumDrive,
-                                                0.20f,
+        const auto germanium = 0.96f * kneeClip(germaniumDrive + 0.035f * germaniumDrive * germaniumDrive,
+                                                0.24f,
                                                 2.7f,
                                                 0.82f);
 
@@ -117,7 +128,8 @@ public:
         else
             mixed = lerp(silicon, germanium, juce::jlimit(0.0f, 1.0f, modeMorph - 1.0f));
 
-        return clampAudio(postLowPass[static_cast<size_t>(channel)].process(mixed));
+        const auto postFiltered = postLowPass[static_cast<size_t>(channel)].process(mixed);
+        return clampAudio(postHighPass[static_cast<size_t>(channel)].process(postFiltered));
     }
 
 private:
@@ -125,5 +137,6 @@ private:
     std::vector<Biquad> preHighPass;
     std::vector<Biquad> preLowPass;
     std::vector<Biquad> postLowPass;
+    std::vector<Biquad> postHighPass;
 };
 } // namespace pyramidfuzz::dsp

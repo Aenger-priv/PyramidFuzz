@@ -13,16 +13,38 @@ public:
     void resized() override;
 
 private:
+    class ImageKnobLookAndFeel final : public juce::LookAndFeel_V4
+    {
+    public:
+        explicit ImageKnobLookAndFeel(juce::Image imageToUse);
+
+        void drawRotarySlider(juce::Graphics& g,
+                              int x,
+                              int y,
+                              int width,
+                              int height,
+                              float sliderPosProportional,
+                              float rotaryStartAngle,
+                              float rotaryEndAngle,
+                              juce::Slider& slider) override;
+
+    private:
+        juce::Image knobImage;
+    };
+
     void timerCallback() override;
     using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
 
     void drawMeter(juce::Graphics& g, juce::Rectangle<float> bounds, float level, const juce::String& label);
+    void drawBackgroundPanel(juce::Graphics& g, juce::Rectangle<int> pedalBounds);
     void configureSlider(juce::Slider& slider, const juce::String& name);
     void configureComboBox(juce::ComboBox& comboBox, const juce::String& name);
     void configureLabel(juce::Label& label, const juce::String& text);
 
     PyramidFuzzAudioProcessor& audioProcessor;
+    ImageKnobLookAndFeel imageKnobLookAndFeel;
+    juce::Image panelArtwork;
 
     juce::Label titleLabel;
     juce::Label inputLabel;

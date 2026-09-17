@@ -20,9 +20,9 @@ The repository is now set up as a JUCE audio plugin shell with a first-pass fuzz
 DSP is organized under `src/dsp/` as discrete blocks:
 
 - `InputVoicingStage`
-  - Handles input gain conditioning plus Hi / Lo input voicing
-  - Hi mode trims more low end and keeps attack tighter
-  - Lo mode leaves more low-frequency weight in front of the gain stages
+  - Handles input gain conditioning plus the schematic's Hi / Lo input loading
+  - Models the C1 coupling behaviour and 39 kOhm / 390 kOhm input-resistor paths
+  - Lo retains more bass but has lower drive, as in the higher-resistance path
 
 - `PreGainStage`
   - Models the first transistor-like stage as coupling-style filtering into mild asymmetric saturation
@@ -40,12 +40,12 @@ DSP is organized under `src/dsp/` as discrete blocks:
     - Germanium: lower threshold, softer knee, slight asymmetry
 
 - `ToneStack`
-  - Approximates the Big Muff family tone section as a dark low-pass branch and bright high-pass branch
-  - Adds a center-position scoop blend so the middle of the sweep feels recognizably Muff-like rather than flat
+  - Solves the modified C9/R5, C8/R8, R25 and C3 passive network by trapezoidal nodal analysis
+  - Uses the confirmed 0.022 uF C8 and 25 kOhm R8 as component values, including source and recovery-stage loading
 
 - `HighControlFilter`
-  - Adds a restrained upper-mid / treble contour after the main tone stack
-  - Implemented as a blend into a fixed high-shelf and presence contour path
+  - Retained as a reusable contour block, but bypassed in the main path
+  - `High` is now the actual R8 rheostat in `ToneStack`, as wired in the schematic
 
 - `OutputStage`
   - Applies recovery gain and a small amount of final glue saturation before volume scaling
@@ -74,7 +74,7 @@ Implementation notes:
 
 - `Input`, `Sustain`, `Tone`, `High`, and `Volume` are smoothed in the DSP engine.
 - `Voicing` and `Clipping Mode` are handled as smoothed morph values rather than hard edge switches, which reduces clicks when changed.
-- `Oversampling` changes at block boundaries and re-prepares the nonlinear stages for the new oversampled rate.
+- `Oversampling` changes at block boundaries and re-prepares the nonlinear stages for the new oversampled rate. The wet path fades down and back up over 6 ms around the state reset, preventing an audible discontinuity when the quality setting changes.
 
 ## Signal path
 
@@ -87,8 +87,9 @@ Current processing order:
 5. ClippingStageB
 6. Downsample back to the host sample rate
 7. ToneStack
-8. HighControlFilter
-9. OutputStage
+8. OutputStage
+
+When the oversampling mode changes, the output stage is briefly muted while the nonlinear filters and oversampler are reconfigured, then returned with a 6 ms linear fade. This is deliberately a small quality-switch interruption rather than a click or burst of stale filter state.
 
 ## Oversampling placement
 

@@ -9,7 +9,7 @@ PyramidFuzz is a JUCE-based macOS plugin project targeting AU/GarageBand first. 
 - `AudioProcessorValueTreeState` parameter layout
 - First-pass DSP engine with modular stages
 - 4x oversampling enabled by default, with 2x / 8x options exposed
-- Basic editor with main controls wired to parameters
+- Stompbox-style editor with parameter attachments and input/output meters
 - Architecture and implementation plan docs
 
 ## Project structure
@@ -27,7 +27,7 @@ The build supports either of these approaches:
 1. Place JUCE as a `JUCE/` subdirectory in the repository.
 2. Provide JUCE through CMake package discovery, for example with `-DCMAKE_PREFIX_PATH=/path/to/JUCE`.
 
-JUCE is not currently vendored in this repository. The CMake entry point is already set up to support either approach cleanly.
+This checkout includes JUCE at `JUCE/`; the CMake entry point also supports an external JUCE package when that directory is absent.
 
 ## Add JUCE on macOS
 
@@ -137,14 +137,13 @@ cmake --build build --config Debug
 - `PreGainStage`: coupling-style filtering plus mild asymmetric saturation
 - `ClippingStageA`: dense compressed fuzz stage with strong sustain contribution
 - `ClippingStageB`: Off / Silicon / Germanium mode with distinct clip curves
-- `Tone`: Big Muff-style dark/bright branch blend with a center-position mid scoop
-- `High`: post-tone presence contour for bite without excessive fizz
+- `Tone`: component-derived passive C8/C9/R5/R25 network solved at audio rate
+- `High`: the schematic's R8 25 kOhm rheostat inside the passive tone network
 - `Volume`: final recovery gain with a little output glue saturation
 
 ## Next steps
 
 1. Tune the internal gain staging and filter corner frequencies by ear against target Muff references.
 2. Improve tone-stack realism with a closer passive-network fit.
-3. Add level metering and output calibration in the UI.
-4. Validate AU behavior in GarageBand on macOS.
-5. Add regression tests or offline response checks for the DSP blocks.
+3. Validate AU behavior in GarageBand on macOS.
+4. Add regression tests or offline response checks for the DSP blocks.

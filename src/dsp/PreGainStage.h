@@ -40,7 +40,7 @@ public:
     {
         const auto filtered = inputLowPass[static_cast<size_t>(channel)].process(couplingHighPass[static_cast<size_t>(channel)].process(sample));
         const auto drive = 2.0f + sustain * 2.6f;
-        const auto saturated = asymSoftClip(filtered * drive, 0.13f);
+        const auto saturated = asymSoftClip(filtered * drive, 0.134f);
         const auto blended = lerp(filtered * 0.82f, saturated, 0.78f);
         return clampAudio(outputLowPass[static_cast<size_t>(channel)].process(blended * 0.96f));
     }

@@ -14,6 +14,8 @@ void FuzzEngine::prepare(double newSampleRate, int maximumBlockSize, int channel
     outputStage.prepare(sampleRate, maxBlockSize, numChannels);
     oversamplingEngine.prepare(numChannels, maxBlockSize);
     oversamplingEngine.setMode(activeOversamplingMode);
+    pendingOversamplingMode = activeOversamplingMode;
+    fadingOutForOversamplingChange = false;
     updateNonlinearSampleRate();
 
     resetSmoother(inputGainSmoothed, sampleRate, 0.02, dbToGain(currentParameters.inputDecibels));
@@ -23,12 +25,16 @@ void FuzzEngine::prepare(double newSampleRate, int maximumBlockSize, int channel
     resetSmoother(volumeGainSmoothed, sampleRate, 0.02, dbToGain(currentParameters.volumeDecibels));
     resetSmoother(voicingMorphSmoothed, sampleRate, 0.01, static_cast<float>(currentParameters.voicingMode));
     resetSmoother(clippingModeMorphSmoothed, sampleRate, 0.01, static_cast<float>(currentParameters.clippingMode));
+    // Changing oversampling replaces filter state. Briefly mute the wet signal around
+    // that change so a quality selection cannot produce a discontinuity at the output.
+    resetSmoother(oversamplingTransitionSmoothed, sampleRate, 0.006, 1.0f);
 
     sustainValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
     toneValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
     highValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
     volumeValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
     clippingModeValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
+    oversamplingTransitionValues.assign(static_cast<size_t>(maxBlockSize), 1.0f);
 }
 
 void FuzzEngine::reset()
@@ -55,12 +61,30 @@ void FuzzEngine::updateParameters(const FuzzParameters& newParameters)
     voicingMorphSmoothed.setTargetValue(static_cast<float>(juce::jlimit(0, 1, currentParameters.voicingMode)));
     clippingModeMorphSmoothed.setTargetValue(static_cast<float>(juce::jlimit(0, 2, currentParameters.clippingMode)));
 
-    if (currentParameters.oversamplingMode != activeOversamplingMode)
+    const auto requestedOversamplingMode = juce::jlimit(0, 2, currentParameters.oversamplingMode);
+
+    if (! fadingOutForOversamplingChange && requestedOversamplingMode != activeOversamplingMode)
     {
-        activeOversamplingMode = juce::jlimit(0, 2, currentParameters.oversamplingMode);
+        pendingOversamplingMode = requestedOversamplingMode;
+        fadingOutForOversamplingChange = true;
+        oversamplingTransitionSmoothed.setTargetValue(0.0f);
+    }
+    else if (fadingOutForOversamplingChange && requestedOversamplingMode == activeOversamplingMode)
+    {
+        // A host may automate quickly through multiple choices. Cancelling a pending
+        // change is safer than unnecessarily resetting the nonlinear stages.
+        fadingOutForOversamplingChange = false;
+        oversamplingTransitionSmoothed.setTargetValue(1.0f);
+    }
+    else if (fadingOutForOversamplingChange && !oversamplingTransitionSmoothed.isSmoothing())
+    {
+        pendingOversamplingMode = requestedOversamplingMode;
+        activeOversamplingMode = pendingOversamplingMode;
         oversamplingEngine.setMode(activeOversamplingMode);
         updateNonlinearSampleRate();
         oversamplingEngine.reset();
+        fadingOutForOversamplingChange = false;
+        oversamplingTransitionSmoothed.setTargetValue(1.0f);
     }
 }
 
@@ -84,6 +108,7 @@ void FuzzEngine::processBlock(juce::AudioBuffer<float>& buffer)
         highValues[static_cast<size_t>(sample)] = high;
         volumeValues[static_cast<size_t>(sample)] = volume;
         clippingModeValues[static_cast<size_t>(sample)] = clippingMode;
+        oversamplingTransitionValues[static_cast<size_t>(sample)] = oversamplingTransitionSmoothed.getNextValue();
 
         for (auto channel = 0; channel < numChannels; ++channel)
         {
@@ -120,14 +145,14 @@ void FuzzEngine::processBlock(juce::AudioBuffer<float>& buffer)
         const auto tone = toneValues[static_cast<size_t>(sample)];
         const auto high = highValues[static_cast<size_t>(sample)];
         const auto volume = volumeValues[static_cast<size_t>(sample)];
+        const auto oversamplingTransition = oversamplingTransitionValues[static_cast<size_t>(sample)];
 
         for (auto channel = 0; channel < numChannels; ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
             auto processedSample = channelData[sample];
-            processedSample = toneStack.processSample(channel, processedSample, tone);
-            processedSample = highControlFilter.processSample(channel, processedSample, high);
-            channelData[sample] = outputStage.processSample(processedSample, volume);
+            processedSample = toneStack.processSample(channel, processedSample, tone, high);
+            channelData[sample] = outputStage.processSample(processedSample, volume) * oversamplingTransition;
         }
     }
 }
@@ -147,9 +172,4 @@ void FuzzEngine::updateNonlinearSampleRate()
     clippingStageB.prepare(oversampledRate, oversampledBlockSize, numChannels);
 }
 
-void FuzzEngine::ensureScratchCapacity(int numSamples)
-{
-    jassert(numSamples <= maxBlockSize);
-    juce::ignoreUnused(numSamples);
-}
 } // namespace pyramidfuzz::dsp

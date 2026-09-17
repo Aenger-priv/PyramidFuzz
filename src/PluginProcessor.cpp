@@ -32,7 +32,14 @@ bool PyramidFuzzAudioProcessor::isBusesLayoutSupported(const BusesLayout& layout
     const auto outputIsMonoOrStereo = mainOutput == juce::AudioChannelSet::mono()
                                    || mainOutput == juce::AudioChannelSet::stereo();
 
-    return inputIsMonoOrStereo && outputIsMonoOrStereo;
+    if (! inputIsMonoOrStereo || ! outputIsMonoOrStereo)
+        return false;
+
+    // The engine intentionally supports the useful mono-to-stereo expansion,
+    // but not stereo-to-mono: the latter would otherwise silently drop right.
+    return mainInput == mainOutput
+        || (mainInput == juce::AudioChannelSet::mono()
+            && mainOutput == juce::AudioChannelSet::stereo());
 }
 
 void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -190,7 +197,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PyramidFuzzAudioProcessor::c
                                                           "Input",
                                                           juce::NormalisableRange<float>(-12.0f, 18.0f, 0.01f),
                                                           0.0f,
-                                                          " dB"));
+                                                          juce::AudioParameterFloatAttributes().withLabel(" dB")));
     parameters.push_back(std::make_unique<FloatParameter>(pyramidfuzz::ParameterIds::sustain,
                                                           "Sustain",
                                                           juce::NormalisableRange<float>(0.0f, 10.0f, 0.01f),
@@ -207,7 +214,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PyramidFuzzAudioProcessor::c
                                                           "Volume",
                                                           juce::NormalisableRange<float>(-30.0f, 12.0f, 0.01f),
                                                           -11.0f,
-                                                          " dB"));
+                                                          juce::AudioParameterFloatAttributes().withLabel(" dB")));
     parameters.push_back(std::make_unique<ChoiceParameter>(pyramidfuzz::ParameterIds::voicing,
                                                            "Voicing",
                                                            juce::StringArray { "Hi", "Lo" },

@@ -1,14 +1,97 @@
 #include "PluginEditor.h"
 
+#include <JuceHeader.h>
+
+namespace
+{
+juce::Image loadPngFromBinaryData(const void* data, int dataSize)
+{
+    juce::MemoryInputStream stream(data, static_cast<size_t>(dataSize), false);
+    return juce::PNGImageFormat::loadFrom(stream);
+}
+}
+
+PyramidFuzzAudioProcessorEditor::ImageKnobLookAndFeel::ImageKnobLookAndFeel(juce::Image imageToUse)
+    : knobImage(std::move(imageToUse))
+{
+}
+
+void PyramidFuzzAudioProcessorEditor::ImageKnobLookAndFeel::drawRotarySlider(juce::Graphics& g,
+                                                                             int x,
+                                                                             int y,
+                                                                             int width,
+                                                                             int height,
+                                                                             float sliderPosProportional,
+                                                                             float rotaryStartAngle,
+                                                                             float rotaryEndAngle,
+                                                                             juce::Slider&)
+{
+    auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
+                                         static_cast<float>(width), static_cast<float>(height));
+    auto imageBounds = bounds.reduced(8.0f, 8.0f);
+
+    g.setColour(juce::Colours::black.withAlpha(0.35f));
+    g.fillEllipse(imageBounds.translated(0.0f, 7.0f));
+
+    if (knobImage.isValid())
+    {
+        const auto angle = juce::jmap(sliderPosProportional, 0.0f, 1.0f, rotaryStartAngle, rotaryEndAngle);
+        const auto knobWidth = static_cast<float>(knobImage.getWidth());
+        const auto knobHeight = static_cast<float>(knobImage.getHeight());
+        const auto scale = juce::jmin(imageBounds.getWidth() / knobWidth,
+                                      imageBounds.getHeight() / knobHeight);
+
+        auto transform = juce::AffineTransform::scale(scale)
+                             .translated(-0.5f * knobWidth * scale,
+                                         -0.5f * knobHeight * scale)
+                             .rotated(angle)
+                             .translated(imageBounds.getCentreX(), imageBounds.getCentreY());
+
+        g.drawImageTransformed(knobImage, transform, false);
+    }
+    else
+    {
+        g.setColour(juce::Colour::fromRGB(64, 53, 36));
+        g.fillEllipse(imageBounds);
+    }
+
+    g.setColour(juce::Colour::fromRGB(246, 216, 142).withAlpha(0.95f));
+    g.drawEllipse(imageBounds, 1.2f);
+
+    auto arcBounds = imageBounds.expanded(6.0f);
+    const auto currentAngle = juce::jmap(sliderPosProportional, 0.0f, 1.0f, rotaryStartAngle, rotaryEndAngle);
+
+    juce::Path backgroundArc;
+    backgroundArc.addCentredArc(arcBounds.getCentreX(), arcBounds.getCentreY(),
+                                arcBounds.getWidth() * 0.5f, arcBounds.getHeight() * 0.5f,
+                                0.0f, rotaryStartAngle, rotaryEndAngle, true);
+    g.setColour(juce::Colours::black.withAlpha(0.35f));
+    g.strokePath(backgroundArc, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    juce::Path valueArc;
+    valueArc.addCentredArc(arcBounds.getCentreX(), arcBounds.getCentreY(),
+                           arcBounds.getWidth() * 0.5f, arcBounds.getHeight() * 0.5f,
+                           0.0f, rotaryStartAngle, currentAngle, true);
+
+    juce::ColourGradient glow(juce::Colour::fromRGB(255, 236, 172), arcBounds.getBottomLeft(),
+                              juce::Colour::fromRGB(200, 114, 30), arcBounds.getTopRight(),
+                              false);
+    g.setGradientFill(glow);
+    g.strokePath(valueArc, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
 PyramidFuzzAudioProcessorEditor::PyramidFuzzAudioProcessorEditor(PyramidFuzzAudioProcessor& processorToEdit)
-    : AudioProcessorEditor(&processorToEdit), audioProcessor(processorToEdit)
+    : AudioProcessorEditor(&processorToEdit),
+      audioProcessor(processorToEdit),
+      imageKnobLookAndFeel(loadPngFromBinaryData(BinaryData::knob_png, BinaryData::knob_pngSize)),
+      panelArtwork(loadPngFromBinaryData(BinaryData::pyramidfuzzpanel_png, BinaryData::pyramidfuzzpanel_pngSize))
 {
     setSize(760, 500);
 
     titleLabel.setText("PYRAMID FUZZ", juce::dontSendNotification);
     titleLabel.setFont(juce::FontOptions(32.0f, juce::Font::bold));
     titleLabel.setJustificationType(juce::Justification::centred);
-    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    titleLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(255, 237, 194));
     addAndMakeVisible(titleLabel);
 
     configureLabel(inputLabel, "Input");
@@ -25,6 +108,11 @@ PyramidFuzzAudioProcessorEditor::PyramidFuzzAudioProcessorEditor(PyramidFuzzAudi
     configureSlider(toneSlider, "Tone");
     configureSlider(highSlider, "High");
     configureSlider(volumeSlider, "Volume");
+
+    sustainSlider.setLookAndFeel(&imageKnobLookAndFeel);
+    toneSlider.setLookAndFeel(&imageKnobLookAndFeel);
+    highSlider.setLookAndFeel(&imageKnobLookAndFeel);
+    volumeSlider.setLookAndFeel(&imageKnobLookAndFeel);
 
     configureComboBox(voicingBox, "Voicing");
     voicingBox.addItemList({ "Hi", "Lo" }, 1);
@@ -51,23 +139,21 @@ void PyramidFuzzAudioProcessorEditor::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
 
-    juce::ColourGradient gradient(juce::Colour::fromRGB(253, 243, 214), bounds.getTopLeft(),
-                                  juce::Colour::fromRGB(204, 160, 65), bounds.getBottomRight(), false);
+    juce::ColourGradient gradient(juce::Colour::fromRGB(20, 15, 11), bounds.getTopLeft(),
+                                  juce::Colour::fromRGB(88, 60, 24), bounds.getBottomRight(), false);
     g.setGradientFill(gradient);
     g.fillAll();
 
     auto pedalBounds = getLocalBounds().reduced(24);
-    g.setColour(juce::Colour::fromRGB(32, 27, 19));
-    g.fillRoundedRectangle(pedalBounds.toFloat(), 28.0f);
-
-    g.setColour(juce::Colour::fromRGB(255, 232, 179));
-    g.drawRoundedRectangle(pedalBounds.toFloat(), 28.0f, 3.0f);
+    drawBackgroundPanel(g, pedalBounds);
 
     auto accentArea = pedalBounds.removeFromBottom(72).reduced(20, 16);
-    g.setColour(juce::Colour::fromRGB(191, 127, 45));
+    g.setColour(juce::Colour::fromRGBA(28, 19, 12, 225));
     g.fillRoundedRectangle(accentArea.toFloat(), 18.0f);
+    g.setColour(juce::Colour::fromRGB(229, 192, 120).withAlpha(0.8f));
+    g.drawRoundedRectangle(accentArea.toFloat(), 18.0f, 1.4f);
 
-    g.setColour(juce::Colours::black.withAlpha(0.65f));
+    g.setColour(juce::Colour::fromRGB(247, 223, 169));
     g.setFont(juce::FontOptions(18.0f, juce::Font::bold));
     g.drawFittedText("Signal", accentArea.removeFromLeft(84), juce::Justification::centred, 1);
 
@@ -78,7 +164,8 @@ void PyramidFuzzAudioProcessorEditor::paint(juce::Graphics& g)
     drawMeter(g, inputMeterArea, inputMeterDisplay, "In");
     drawMeter(g, outputMeterArea, outputMeterDisplay, "Out");
 
-    g.drawFittedText("Pyramid Fuzz voice tuned for thicker low mids and smoother top end",
+    g.setColour(juce::Colour::fromRGB(244, 223, 178));
+    g.drawFittedText("Esoteric Ram's Head-derived doom fuzz with switchable clipping",
                      accentArea,
                      juce::Justification::centredLeft,
                      2);
@@ -87,12 +174,12 @@ void PyramidFuzzAudioProcessorEditor::paint(juce::Graphics& g)
 void PyramidFuzzAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds().reduced(42, 28);
-    titleLabel.setBounds(bounds.removeFromTop(54));
+    titleLabel.setBounds(bounds.removeFromTop(60));
 
+    bounds.removeFromTop(10);
+    auto comboRow = bounds.removeFromTop(74);
     bounds.removeFromTop(12);
-    auto comboRow = bounds.removeFromTop(78);
-    bounds.removeFromTop(8);
-    auto knobRow = bounds.removeFromTop(260);
+    auto knobRow = bounds.removeFromTop(286);
 
     const auto comboWidth = comboRow.getWidth() / 3;
     auto voicingArea = comboRow.removeFromLeft(comboWidth).reduced(10);
@@ -106,35 +193,38 @@ void PyramidFuzzAudioProcessorEditor::resized()
     oversamplingLabel.setBounds(oversamplingArea.removeFromTop(20));
     oversamplingBox.setBounds(oversamplingArea);
 
-    const auto knobWidth = knobRow.getWidth() / 5;
-    auto inputArea = knobRow.removeFromLeft(knobWidth).reduced(10);
-    auto sustainArea = knobRow.removeFromLeft(knobWidth).reduced(10);
-    auto toneArea = knobRow.removeFromLeft(knobWidth).reduced(10);
-    auto highArea = knobRow.removeFromLeft(knobWidth).reduced(10);
-    auto volumeArea = knobRow.reduced(10);
+    auto inputArea = knobRow.removeFromLeft(78).reduced(8, 18);
+    auto mainKnobArea = knobRow.reduced(8, 0);
+    const auto knobWidth = mainKnobArea.getWidth() / 4;
 
-    inputLabel.setBounds(inputArea.removeFromTop(20));
-    inputSlider.setBounds(inputArea);
+    auto sustainArea = mainKnobArea.removeFromLeft(knobWidth).reduced(8);
+    auto toneArea = mainKnobArea.removeFromLeft(knobWidth).reduced(8);
+    auto highArea = mainKnobArea.removeFromLeft(knobWidth).reduced(8);
+    auto volumeArea = mainKnobArea.reduced(8);
+
+    inputLabel.setBounds(inputArea.removeFromTop(18));
+    inputSlider.setBounds(inputArea.removeFromTop(188));
+
     sustainLabel.setBounds(sustainArea.removeFromTop(20));
-    sustainSlider.setBounds(sustainArea);
+    sustainSlider.setBounds(sustainArea.removeFromTop(212));
     toneLabel.setBounds(toneArea.removeFromTop(20));
-    toneSlider.setBounds(toneArea);
+    toneSlider.setBounds(toneArea.removeFromTop(212));
     highLabel.setBounds(highArea.removeFromTop(20));
-    highSlider.setBounds(highArea);
+    highSlider.setBounds(highArea.removeFromTop(212));
     volumeLabel.setBounds(volumeArea.removeFromTop(20));
-    volumeSlider.setBounds(volumeArea);
+    volumeSlider.setBounds(volumeArea.removeFromTop(212));
 }
 
 void PyramidFuzzAudioProcessorEditor::configureSlider(juce::Slider& slider, const juce::String& name)
 {
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 78, 24);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 84, 24);
     slider.setName(name);
     slider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colour::fromRGB(196, 132, 41));
     slider.setColour(juce::Slider::thumbColourId, juce::Colours::black);
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour::fromRGB(252, 237, 201));
     slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::black.withAlpha(0.35f));
+    slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::black.withAlpha(0.55f));
     slider.setTextValueSuffix({});
     addAndMakeVisible(slider);
 }
@@ -144,9 +234,9 @@ void PyramidFuzzAudioProcessorEditor::configureComboBox(juce::ComboBox& comboBox
     comboBox.setName(name);
     comboBox.setTextWhenNothingSelected(name);
     comboBox.setJustificationType(juce::Justification::centred);
-    comboBox.setColour(juce::ComboBox::backgroundColourId, juce::Colours::black.withAlpha(0.35f));
-    comboBox.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-    comboBox.setColour(juce::ComboBox::outlineColourId, juce::Colour::fromRGB(255, 232, 179));
+    comboBox.setColour(juce::ComboBox::backgroundColourId, juce::Colours::black.withAlpha(0.48f));
+    comboBox.setColour(juce::ComboBox::textColourId, juce::Colour::fromRGB(255, 240, 206));
+    comboBox.setColour(juce::ComboBox::outlineColourId, juce::Colour::fromRGB(255, 221, 151));
     addAndMakeVisible(comboBox);
 }
 
@@ -154,7 +244,7 @@ void PyramidFuzzAudioProcessorEditor::configureLabel(juce::Label& label, const j
 {
     label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colours::white);
+    label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(255, 230, 176));
     addAndMakeVisible(label);
 }
 
@@ -188,10 +278,47 @@ void PyramidFuzzAudioProcessorEditor::drawMeter(juce::Graphics& g,
     g.setGradientFill(meterGradient);
     g.fillRoundedRectangle(fillBounds, 6.0f);
 
-    g.setColour(juce::Colour::fromRGB(255, 232, 179));
+    g.setColour(juce::Colour::fromRGB(255, 225, 158));
     g.drawRoundedRectangle(meterBounds, 8.0f, 1.5f);
 
-    g.setColour(juce::Colours::black.withAlpha(0.75f));
+    g.setColour(juce::Colour::fromRGB(250, 225, 167));
     g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
     g.drawFittedText(label, labelArea.toNearestInt(), juce::Justification::centred, 1);
+}
+
+void PyramidFuzzAudioProcessorEditor::drawBackgroundPanel(juce::Graphics& g, juce::Rectangle<int> pedalBounds)
+{
+    auto panel = pedalBounds.toFloat();
+
+    g.setColour(juce::Colour::fromRGB(18, 13, 10));
+    g.fillRoundedRectangle(panel, 28.0f);
+
+    juce::Path clip;
+    clip.addRoundedRectangle(panel, 28.0f);
+    g.saveState();
+    g.reduceClipRegion(clip);
+
+    if (panelArtwork.isValid())
+    {
+        g.drawImageWithin(panelArtwork,
+                          pedalBounds.getX(),
+                          pedalBounds.getY(),
+                          pedalBounds.getWidth(),
+                          pedalBounds.getHeight(),
+                          juce::RectanglePlacement::fillDestination);
+    }
+
+    juce::ColourGradient shadow(juce::Colours::transparentBlack, panel.getCentreX(), panel.getY() + 60.0f,
+                                juce::Colours::black.withAlpha(0.58f), panel.getCentreX(), panel.getBottom(),
+                                false);
+    shadow.addColour(0.35, juce::Colours::black.withAlpha(0.14f));
+    g.setGradientFill(shadow);
+    g.fillRoundedRectangle(panel, 28.0f);
+    g.restoreState();
+
+    g.setColour(juce::Colour::fromRGB(252, 230, 172).withAlpha(0.9f));
+    g.drawRoundedRectangle(panel.reduced(1.5f), 28.0f, 2.5f);
+
+    g.setColour(juce::Colours::black.withAlpha(0.24f));
+    g.drawRoundedRectangle(panel.reduced(10.0f), 22.0f, 1.0f);
 }

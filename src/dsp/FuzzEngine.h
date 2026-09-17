@@ -34,12 +34,13 @@ public:
 
 private:
     void updateNonlinearSampleRate();
-    void ensureScratchCapacity(int numSamples);
 
     double sampleRate { 44100.0 };
     int maxBlockSize { 0 };
     int numChannels { 0 };
     int activeOversamplingMode { 1 };
+    int pendingOversamplingMode { 1 };
+    bool fadingOutForOversamplingChange { false };
 
     FuzzParameters currentParameters;
 
@@ -59,11 +60,13 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> volumeGainSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> voicingMorphSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> clippingModeMorphSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> oversamplingTransitionSmoothed;
 
     std::vector<float> sustainValues;
     std::vector<float> toneValues;
     std::vector<float> highValues;
     std::vector<float> volumeValues;
     std::vector<float> clippingModeValues;
+    std::vector<float> oversamplingTransitionValues;
 };
 } // namespace pyramidfuzz::dsp

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(PyramidFuzz VERSION 0.1.0 LANGUAGES CXX)
+project(PyramidFuzz VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,12 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/CMakeLists.txt")
 else()
     find_package(JUCE CONFIG REQUIRED)
 endif()
+
+juce_add_binary_data(PyramidFuzzAssets
+    SOURCES
+        assets/generated/knob.png
+        assets/generated/pyramid-fuzz-panel.png
+)
 
 juce_add_plugin(PyramidFuzz
     COMPANY_NAME "Anders"
@@ -59,6 +65,7 @@ target_link_libraries(PyramidFuzz
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
+        PyramidFuzzAssets
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
