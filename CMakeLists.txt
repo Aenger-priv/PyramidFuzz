@@ -88,3 +88,14 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
     src/dsp/ClippingStage.h
     src/dsp/ToneStack.h
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    juce_add_console_app(PyramidFuzzDspTests PRODUCT_NAME "Pyramid Fuzz DSP Tests")
+    juce_generate_juce_header(PyramidFuzzDspTests)
+    target_sources(PyramidFuzzDspTests PRIVATE tests/DspTests.cpp src/dsp/FuzzEngine.cpp)
+    target_include_directories(PyramidFuzzDspTests PRIVATE src)
+    target_compile_definitions(PyramidFuzzDspTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(PyramidFuzzDspTests PRIVATE juce::juce_audio_utils juce::juce_dsp)
+    add_test(NAME PyramidFuzzDspTests COMMAND PyramidFuzzDspTests)
+endif()

@@ -74,7 +74,7 @@ inline float asymSoftClip(float sample, float asymmetry)
     return std::tanh(skewed);
 }
 
-inline float kneeClip(float sample, float threshold, float softness, float ceiling)
+inline float kneeClip(float sample, float threshold, float ceiling)
 {
     const auto sign = sample >= 0.0f ? 1.0f : -1.0f;
     const auto absolute = std::abs(sample);
@@ -83,8 +83,10 @@ inline float kneeClip(float sample, float threshold, float softness, float ceili
         return sample;
 
     const auto excess = absolute - threshold;
-    const auto compressed = threshold + (ceiling - threshold) * (1.0f - std::exp(-softness * excess));
-    return sign * juce::jmin(compressed, ceiling);
+    // Match the linear region's slope at the knee to avoid an abrupt
+    // change in derivative, while smoothly approaching the diode ceiling.
+    const auto headroom = ceiling - threshold;
+    return sign * (threshold + headroom * std::tanh(excess / headroom));
 }
 
 inline BiquadCoefficients makeLowPass(double sampleRate, float frequency, float q = 0.7071f)

@@ -15,17 +15,17 @@ public:
                                                                             1,
                                                                             juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
                                                                             true,
-                                                                            false);
+                                                                            true);
         oversamplers[1] = std::make_unique<juce::dsp::Oversampling<float>>(static_cast<size_t>(channels),
                                                                             2,
                                                                             juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
                                                                             true,
-                                                                            false);
+                                                                            true);
         oversamplers[2] = std::make_unique<juce::dsp::Oversampling<float>>(static_cast<size_t>(channels),
                                                                             3,
                                                                             juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
                                                                             true,
-                                                                            false);
+                                                                            true);
 
         for (auto& oversampler : oversamplers)
         {
@@ -61,7 +61,7 @@ public:
         if (oversamplers[static_cast<size_t>(modeIndex)] == nullptr)
             return 0;
 
-        return static_cast<int>(std::ceil(oversamplers[static_cast<size_t>(modeIndex)]->getLatencyInSamples()));
+        return juce::roundToInt(oversamplers[static_cast<size_t>(modeIndex)]->getLatencyInSamples());
     }
 
     template <typename ProcessFn>

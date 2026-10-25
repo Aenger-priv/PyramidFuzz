@@ -9,7 +9,8 @@ The repository is now set up as a JUCE audio plugin shell with a first-pass fuzz
   - Owns `AudioProcessorValueTreeState`
   - Exposes the parameter layout required by the product brief
   - Pulls parameter values into a modular DSP engine each block
-  - Reports oversampling latency back to the host
+  - Reports integer oversampling latency back to the host
+  - Initializes the DSP from the current parameter state and splits oversized host blocks into preallocated chunks
 
 - `PyramidFuzzAudioProcessorEditor`
   - Owns control widgets and parameter attachments
@@ -34,6 +35,7 @@ DSP is organized under `src/dsp/` as discrete blocks:
 
 - `ClippingStageB`
   - Second major clipping stage
+  - Uses a continuous-slope diode knee to avoid extra high-frequency content at the clipping threshold
   - Offers three continuously morphable internal responses:
     - Off: lightly limited, more open
     - Silicon: harder knee, brighter ceiling, tighter attack
@@ -52,7 +54,7 @@ DSP is organized under `src/dsp/` as discrete blocks:
 
 - `OversamplingEngine`
   - Wraps JUCE oversamplers for 2x / 4x / 8x operation
-  - 4x is the default working mode for v1
+  - 4x is the default working mode for v1; integer-latency compensation matches the reported host latency
 
 - `FuzzEngine`
   - Coordinates parameter smoothing, oversampling selection, stage ordering, and channel-safe processing
@@ -103,7 +105,7 @@ This keeps the strongest alias generators inside the oversampled path while leav
 
 ## Current approximations
 
-- The tone stack is a practical branch-blend approximation, not a strict passive network solver.
+- The tone stack solves a simplified passive network with approximated source and load impedances; it is not a complete transistor-level circuit simulation.
 - The clipping stages are tuned transfer functions rather than literal diode equations.
 - Filter controls that are implemented as path blends are smoothed musically, but the design is still intended for refinement by ear.
 
@@ -112,5 +114,5 @@ This keeps the strongest alias generators inside the oversampled path while leav
 1. Tune the clipping transfer constants by ear against a target pedal reference.
 2. Improve the tone stack fit so the bright side cuts harder without adding fizz.
 3. Refine output calibration and perceived loudness across clipping modes.
-4. Add metering and optional hidden trim controls for development.
+4. Expand offline checks with measured response and reference recordings.
 5. Validate host behavior and automation smoothness in GarageBand.

@@ -13,6 +13,7 @@ void FuzzEngine::prepare(double newSampleRate, int maximumBlockSize, int channel
     highControlFilter.prepare(sampleRate, maxBlockSize, numChannels);
     outputStage.prepare(sampleRate, maxBlockSize, numChannels);
     oversamplingEngine.prepare(numChannels, maxBlockSize);
+    activeOversamplingMode = juce::jlimit(0, 2, currentParameters.oversamplingMode);
     oversamplingEngine.setMode(activeOversamplingMode);
     pendingOversamplingMode = activeOversamplingMode;
     fadingOutForOversamplingChange = false;

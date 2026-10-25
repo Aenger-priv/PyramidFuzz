@@ -55,11 +55,13 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 private:
+    pyramidfuzz::dsp::FuzzParameters readParameters() const;
     void updateMeter(std::atomic<float>& meter, float newPeak) noexcept;
 
     pyramidfuzz::dsp::FuzzEngine fuzzEngine;
     juce::AudioProcessorValueTreeState valueTreeState;
     int latencySamples { 0 };
+    int preparedBlockSize { 1 };
     std::atomic<float> inputMeterLevel { 0.0f };
     std::atomic<float> outputMeterLevel { 0.0f };
 

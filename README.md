@@ -10,7 +10,7 @@ PyramidFuzz is a JUCE-based macOS plugin project targeting AU/GarageBand first. 
 - First-pass DSP engine with modular stages
 - 4x oversampling enabled by default, with 2x / 8x options exposed
 - Stompbox-style editor with parameter attachments and input/output meters
-- Architecture and implementation plan docs
+- Offline DSP regression checks across sample rates, clipping modes, and oversampling settings
 
 ## Project structure
 
@@ -141,9 +141,13 @@ cmake --build build --config Debug
 - `High`: the schematic's R8 25 kOhm rheostat inside the passive tone network
 - `Volume`: final recovery gain with a little output glue saturation
 
-## Next steps
+## DSP checks
 
-1. Tune the internal gain staging and filter corner frequencies by ear against target Muff references.
-2. Improve tone-stack realism with a closer passive-network fit.
-3. Validate AU behavior in GarageBand on macOS.
-4. Add regression tests or offline response checks for the DSP blocks.
+With CMake testing enabled (the default), build and run the offline checks:
+
+```bash
+cmake --build build --config Debug --target PyramidFuzzDspTests
+ctest --test-dir build -C Debug --output-on-failure
+```
+
+The checks cover clipping-knee continuity, finite output, stereo consistency and signal flow at 44.1, 48 and 96 kHz across all clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain important for assessing the sound and host behavior.

@@ -12,7 +12,9 @@ PyramidFuzzAudioProcessor::PyramidFuzzAudioProcessor()
 void PyramidFuzzAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     const auto channels = juce::jmax(getTotalNumOutputChannels(), 1);
-    fuzzEngine.prepare(sampleRate, samplesPerBlock, channels);
+    preparedBlockSize = juce::jmax(1, samplesPerBlock);
+    fuzzEngine.updateParameters(readParameters());
+    fuzzEngine.prepare(sampleRate, preparedBlockSize, channels);
     latencySamples = fuzzEngine.getLatencySamples();
     setLatencySamples(latencySamples);
 }
@@ -66,18 +68,15 @@ void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
             buffer.clear(channel, 0, numSamples);
     }
 
-    pyramidfuzz::dsp::FuzzParameters parameters;
-    parameters.inputDecibels = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::input);
-    parameters.sustain = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::sustain) / 10.0f;
-    parameters.tone = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::tone);
-    parameters.high = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::high);
-    parameters.volumeDecibels = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::volume);
-    parameters.voicingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::voicing));
-    parameters.clippingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::clippingMode));
-    parameters.oversamplingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::oversampling));
-
-    fuzzEngine.updateParameters(parameters);
-    fuzzEngine.processBlock(buffer);
+    fuzzEngine.updateParameters(readParameters());
+    // Hosts can occasionally supply blocks larger than their preparation hint.
+    // Process bounded views so the engine's preallocated scratch remains safe.
+    for (int offset = 0; offset < numSamples; offset += preparedBlockSize)
+    {
+        const auto length = juce::jmin(preparedBlockSize, numSamples - offset);
+        juce::AudioBuffer<float> chunk(buffer.getArrayOfWritePointers(), numOutputChannels, offset, length);
+        fuzzEngine.processBlock(chunk);
+    }
 
     float outputPeak = 0.0f;
     for (auto channel = 0; channel < numOutputChannels; ++channel)
@@ -234,6 +233,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout PyramidFuzzAudioProcessor::c
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new PyramidFuzzAudioProcessor();
+}
+
+pyramidfuzz::dsp::FuzzParameters PyramidFuzzAudioProcessor::readParameters() const
+{
+    pyramidfuzz::dsp::FuzzParameters parameters;
+    parameters.inputDecibels = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::input);
+    parameters.sustain = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::sustain) / 10.0f;
+    parameters.tone = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::tone);
+    parameters.high = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::high);
+    parameters.volumeDecibels = *valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::volume);
+    parameters.voicingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::voicing));
+    parameters.clippingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::clippingMode));
+    parameters.oversamplingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::oversampling));
+    return parameters;
 }
 
 void PyramidFuzzAudioProcessor::updateMeter(std::atomic<float>& meter, float newPeak) noexcept

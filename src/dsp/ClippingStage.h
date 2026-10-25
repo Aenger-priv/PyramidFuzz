@@ -113,13 +113,11 @@ public:
         // Silicon mode uses a harder knee and a brighter, tighter ceiling.
         const auto silicon = kneeClip(siliconDrive,
                                       0.42f,
-                                      6.2f,
                                       0.88f);
 
         // Germanium mode clips earlier with a softer knee and slight asymmetry for squish.
         const auto germanium = 0.96f * kneeClip(germaniumDrive + 0.035f * germaniumDrive * germaniumDrive,
                                                 0.24f,
-                                                2.7f,
                                                 0.82f);
 
         float mixed = silicon;
