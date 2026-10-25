@@ -1,153 +1,59 @@
-# PyramidFuzz
+# Pyramid Fuzz
 
-PyramidFuzz is a JUCE-based macOS plugin project targeting AU/GarageBand first. The repository now contains a first working DSP core: modular fuzz stages, selectable clipping modes, a Muff-style tone approximation, and selectable 2x / 4x / 8x oversampling with 4x as the default.
+Pyramid Fuzz is a JUCE guitar fuzz for macOS, inspired by a modified Ram's Head Big Muff circuit. It builds as an Audio Unit for hosts such as GarageBand and as a standalone app. The DSP uses schematic-guided gain and clipping stages and a passive tone-network model; it is not a full transistor-level simulation.
 
-## Current status
+## Controls
 
-- JUCE + CMake plugin scaffold
-- AU and Standalone targets
-- `AudioProcessorValueTreeState` parameter layout
-- First-pass DSP engine with modular stages
-- 4x oversampling enabled by default, with 2x / 8x options exposed
-- Stompbox-style editor with parameter attachments and input/output meters
-- Offline DSP regression checks across sample rates, clipping modes, and oversampling settings
+- **Input** adjusts the signal level entering the fuzz.
+- **Sustain** adjusts the gain and compression of the fuzz stages.
+- **Tone** sweeps the passive tone network from darker to brighter; **High** adjusts its high-frequency branch.
+- **Volume** sets the output level.
+- **Voicing** selects the tighter Hi input or the fuller, lower-drive Lo input.
+- **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off retains the gain stage with a more open response.
+- **Oversampling** selects 2x, 4x, or 8x processing of the nonlinear stages. The default is 4x. Changing it briefly fades the signal while the processing is reset.
 
-## Project structure
+The editor also displays input and output levels. The plugin supports mono and stereo input/output, including mono input to stereo output.
 
-- `CMakeLists.txt`: top-level JUCE/CMake build
-- `src/PluginProcessor.*`: plugin shell, bus layout, parameter state, DSP integration
-- `src/PluginEditor.*`: initial GUI scaffold and parameter attachments
-- `src/dsp/*`: DSP blocks, oversampling engine, and fuzz signal path
-- `docs/architecture.md`: DSP architecture, oversampling placement, and refinement notes
+## Build and run on macOS
 
-## JUCE setup
-
-The build supports either of these approaches:
-
-1. Place JUCE as a `JUCE/` subdirectory in the repository.
-2. Provide JUCE through CMake package discovery, for example with `-DCMAKE_PREFIX_PATH=/path/to/JUCE`.
-
-This checkout includes JUCE at `JUCE/`; the CMake entry point also supports an external JUCE package when that directory is absent.
-
-## Add JUCE on macOS
-
-Prerequisites:
-
-1. Install full Xcode from the Mac App Store.
-2. Ensure the active developer directory points at Xcode, not only Command Line Tools:
+Install Xcode and CMake 3.22 or newer. Clone the repository with its JUCE submodule, or initialize it in an existing checkout:
 
 ```bash
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+git submodule update --init --recursive
 ```
 
-3. Confirm Xcode is active:
-
-```bash
-xcodebuild -version
-```
-
-### Option A: vendor JUCE inside the repo
-
-1. From the project root, add JUCE as a sibling project directory named `JUCE`.
-2. Example:
-
-```bash
-git clone https://github.com/juce-framework/JUCE.git JUCE
-```
-
-3. Confirm this file exists:
-
-```bash
-ls JUCE/CMakeLists.txt
-```
-
-4. Configure the project:
+From the project directory, configure and build the standalone app and Audio Unit:
 
 ```bash
 cmake -S . -B build -G Xcode -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --config Debug --target PyramidFuzz_Standalone PyramidFuzz_AU
 ```
 
-5. Open the generated Xcode project:
+Launch the standalone app:
 
 ```bash
-open build/PyramidFuzz.xcodeproj
+open "build/PyramidFuzz_artefacts/Debug/Standalone/Pyramid Fuzz.app"
 ```
 
-### Option B: use an existing JUCE checkout via `CMAKE_PREFIX_PATH`
+The Audio Unit is built at `build/PyramidFuzz_artefacts/Debug/AU/Pyramid Fuzz.component`. The build does not install it automatically. To use it in GarageBand, copy the component to `~/Library/Audio/Plug-Ins/Components`, then restart GarageBand if needed. `auval -a` lists registered Audio Units.
 
-1. Clone JUCE anywhere on your Mac, for example:
+The build also supports an installed JUCE CMake package when the `JUCE/` submodule is absent; point `CMAKE_PREFIX_PATH` at the package's installation prefix.
 
-```bash
-git clone https://github.com/juce-framework/JUCE.git ~/SDKs/JUCE
-```
+## Tests
 
-2. Configure PyramidFuzz against that checkout:
-
-```bash
-cmake -S . -B build -G Xcode -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=~/SDKs/JUCE
-```
-
-3. Open the Xcode project:
-
-```bash
-open build/PyramidFuzz.xcodeproj
-```
-
-### AU notes for macOS / GarageBand
-
-1. Build the `PyramidFuzz_AU` target in Xcode.
-2. If plugin validation or discovery is stale, restart GarageBand after the AU build finishes.
-3. If needed, inspect AU registration with:
-
-```bash
-auval -a
-```
-
-4. GarageBand typically discovers user Audio Units from:
-
-```text
-~/Library/Audio/Plug-Ins/Components
-```
-
-## Configure
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/path/to/JUCE
-```
-
-If JUCE is vendored into `JUCE/`, `CMAKE_PREFIX_PATH` is not required.
-
-## Build
-
-```bash
-cmake --build build
-```
-
-To generate an Xcode project explicitly on macOS:
-
-```bash
-cmake -S . -B build -G Xcode -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/path/to/JUCE
-cmake --build build --config Debug
-```
-
-## Current DSP implementation
-
-- `Input`: pre-gain trim before the fuzz path
-- `Voicing`: crossfades between a tighter Hi input filter set and a fuller Lo input filter set
-- `PreGainStage`: coupling-style filtering plus mild asymmetric saturation
-- `ClippingStageA`: dense compressed fuzz stage with strong sustain contribution
-- `ClippingStageB`: Off / Silicon / Germanium mode with distinct clip curves
-- `Tone`: component-derived passive C8/C9/R5/R25 network solved at audio rate
-- `High`: the schematic's R8 25 kOhm rheostat inside the passive tone network
-- `Volume`: final recovery gain with a little output glue saturation
-
-## DSP checks
-
-With CMake testing enabled (the default), build and run the offline checks:
+CMake testing is enabled by default. Build and run the offline DSP checks with:
 
 ```bash
 cmake --build build --config Debug --target PyramidFuzzDspTests
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-The checks cover clipping-knee continuity, finite output, stereo consistency and signal flow at 44.1, 48 and 96 kHz across all clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain important for assessing the sound and host behavior.
+The checks cover clipping-knee continuity, finite output, stereo consistency, and signal flow at 44.1, 48, and 96 kHz across the clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain useful steps for assessing sound and host behavior.
+
+## Project layout
+
+- `src/PluginProcessor.*` and `src/PluginEditor.*`: plugin integration, parameters, and interface.
+- `src/dsp/`: fuzz stages, tone network, and oversampling.
+- `tests/`: offline DSP checks.
+- [docs/architecture.md](docs/architecture.md): signal path and implementation details.
+- [docs/schematic-analysis.md](docs/schematic-analysis.md): notes on the source schematic.
