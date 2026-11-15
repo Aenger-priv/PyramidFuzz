@@ -1,8 +1,9 @@
 # Step 2: passive tone-network correction
 
 Implemented 2026-11-15 following approval of Step 2. Numerical validation passes;
-sound acceptance awaits listening, including a real guitar DI. Step 3 has not
-started. The [original baseline](baseline-review.md) remains preserved.
+the user also reports good sound and smooth control sweeps with a Les Paul with
+humbuckers through the corrected standalone. Step 3 has not started. The
+[original baseline](baseline-review.md) remains preserved.
 
 ## Practical change
 
@@ -101,14 +102,19 @@ High .22, Volume -11 dB. Both versions use the identical synthetic dry file.
   Tone sweep against the independent reference. The plot was visually inspected.
 
 The examples use default controls, not a recording of someone sweeping the knobs.
-They are synthetic plucks, not real guitar or a measured pedal. Audition tonal
-balance and attacks, then use the same real DI through both versions before
-accepting playing feel. No subjective improvement is claimed from plots alone.
+They are synthetic plucks, not real guitar or a measured pedal. A captured real
+DI through both versions would make listening comparisons reproducible; none
+has been captured here. No subjective improvement is claimed from plots alone.
 
 Initial user listening feedback on the supplied comparison: the corrected version
-sounds smoother and less distorted. This is a listening observation, not yet an
-explicit preference or approval to begin Step 3. The measured clipping-stage
-statistics are unchanged; the downstream tone response reshapes their harmonics.
+sounds smoother and less distorted. The measured clipping-stage statistics are
+unchanged; the downstream tone response reshapes their harmonics.
+
+The user subsequently tested the corrected standalone with an actual Les Paul
+with humbuckers and reported that it sounds good and the knobs sweep nicely.
+This is a positive live-guitar check on that setup, not a recorded DI A/B or a
+hardware-pedal comparison. Retain the Step 2 build as the comparison point for
+later changes. Approval to begin Step 3 is still separate.
 
 ## Reproduce and inspect
 

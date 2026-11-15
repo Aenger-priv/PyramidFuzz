@@ -2,8 +2,8 @@
 
 Date: 2026-11-15. Reviewed baseline: `b98a3be` on `main`.
 Status: Steps 1 and 2 were approved and implemented. Step 2 passes its numerical
-checks; its [listening review](tone-correction-review.md) remains open. Steps 3–7
-await separate approval.
+checks and has positive [live-guitar feedback](tone-correction-review.md) with
+a Les Paul with humbuckers. Steps 3–7 await separate approval.
 
 ## Direction
 
@@ -215,8 +215,8 @@ and approval of the resulting sound and interface.
 
 ## Current review gate
 
-Step 2's tone-network correction is implemented and passes the Step 1 numerical
-limits. The user chose revised sound for existing sessions with the original
-build retained separately, rather than a legacy model. Review the comparison
-files and audition a real guitar DI before accepting the sound and proceeding
-to Step 3. Synthetic files establish a repeatable comparison, not playing feel.
+Step 2's tone-network correction passes the Step 1 numerical limits, and the
+user's live test with a Les Paul with humbuckers found good sound and smooth knob
+sweeps. Keep this build as the comparison point for the next changes. No real DI
+recording or hardware-pedal comparison has been captured. The next approval is
+Step 3: input conditioning and schematic Sustain placement.
