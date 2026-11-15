@@ -133,7 +133,7 @@ def analyse(folder):
     write_csv(folder / "loading-sensitivity.csv", list(sensitivity[0]), sensitivity)
     ids = sorted({int(r["case_id"]) for r in stages})
     stage_names = {r["stage"] for r in stages}
-    expected_stages = {"dry", "input_voicing", "pre_gain", "sustain", "clip_a", "clip_b", "downsampled", "tone", "output"}
+    expected_stages = {"dry", "input_voicing", "pre_gain", "sustain", "clip_a", "clip_b", "downsampled", "tone", "recovery", "output"}
     if (len(ids) != 117 or stage_names != expected_stages or len(stages) != 117 * len(expected_stages)
             or len(harmonics) != 117 * 32):
         raise ValueError("Incomplete gain/stage/harmonic matrix")
@@ -199,7 +199,7 @@ def main():
                 "command": [str(executable), "--output", str(folder / "raw")],
                 "di_inputs": [{"path": str(p.resolve()), "sha256": sha256(p)} for p in args.di],
                 "session_policy": "User chose revised sound for existing sessions; original build retained separately. No legacy DSP model planned.",
-                "signal_scale": "DSP values are dimensionless; no physical volts-per-dBFS calibration exists. Reference AC source is 1 V for ratios only."}
+                "signal_scale": "Input: 1 digital unit = 1 nominal model volt; output: 3 model volts = 1 digital unit before Volume. This is an explicit convention, not measured interface/pedal calibration."}
     for p in args.di:
         manifest["command"].extend(["--di", str(p.resolve())])
     (folder / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

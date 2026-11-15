@@ -215,8 +215,9 @@ and approval of the resulting sound and interface.
 
 ## Current review gate
 
-Step 3's input/Sustain revision is implemented and passes its nominal circuit and
-safety checks. Audition Hi/Lo, Sustain travel, hot humbuckers and low-string response
-against the retained, positively reviewed Step 2 build. No real DI recording or
-hardware-pedal comparison has been captured. Step 4's clipping/recovery calibration
-requires separate approval after this listening review.
+Step 4 was approved after the clipping-path review. Its reduced feedback model,
+recovery/coupling correction and mode checks are implemented; see the
+[clipping/recovery review](clipping-recovery-review.md). Audition Off/Si/Ge with
+real guitar against the retained Step 3 build, including a second pass with
+Volume adjusted for comparable loudness. No real DI or physical-pedal reference
+has been captured. Step 5 requires separate approval after this listening review.

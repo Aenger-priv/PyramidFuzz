@@ -54,6 +54,7 @@ target_sources(PyramidFuzz
         src/dsp/OversamplingEngine.h
         src/dsp/OutputStage.h
         src/dsp/PreGainStage.h
+        src/dsp/FeedbackClipper.h
         src/dsp/ClippingStage.h
         src/dsp/ToneStack.h
 )
@@ -90,6 +91,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
     src/dsp/OversamplingEngine.h
     src/dsp/OutputStage.h
     src/dsp/PreGainStage.h
+    src/dsp/FeedbackClipper.h
     src/dsp/ClippingStage.h
     src/dsp/ToneStack.h
 )
@@ -121,6 +123,10 @@ if(BUILD_TESTING)
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/validate_tone_capture.py"
                     --executable "$<TARGET_FILE:PyramidFuzzMeasurements>")
         set_tests_properties(PyramidFuzzToneResponseTests PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
+        add_test(NAME PyramidFuzzClippingResponseTests
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/validate_clipping_capture.py"
+                    --executable "$<TARGET_FILE:PyramidFuzzMeasurements>")
+        set_tests_properties(PyramidFuzzClippingResponseTests PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
         add_test(NAME PyramidFuzzInputResponseTests
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/validate_input_capture.py"
                     --executable "$<TARGET_FILE:PyramidFuzzMeasurements>")

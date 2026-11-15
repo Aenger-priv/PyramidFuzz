@@ -36,11 +36,11 @@ class TappedPath
 public:
     TappedPath(double rate, int channels, const FuzzParameters& p) : parameters(p)
     {
-        tone.prepare(rate, blockSize, channels);
-        output.prepare(rate, blockSize, channels);
         oversampling.prepare(channels, blockSize);
         oversampling.setMode(p.oversamplingMode);
         const auto factor = oversampling.getFactor();
+        tone.prepare(rate * factor, blockSize * factor, channels);
+        output.prepare(rate * factor, blockSize * factor, channels);
         input.prepare(rate * factor, blockSize * factor, channels);
         pre.prepare(rate * factor, blockSize * factor, channels);
         sustain.prepare(rate * factor, blockSize * factor, channels);
@@ -62,17 +62,21 @@ public:
                 {
                     auto x = tap("input_voicing", input.processSample(int(ch), up.getSample(int(ch), int(i)), dbToGain(parameters.inputDecibels), float(parameters.voicingMode)));
                     x = tap("pre_gain", pre.processSample(int(ch), x));
-                    x = tap("sustain", sustain.processSample(int(ch), x, parameters.sustain, float(parameters.voicingMode)));
-                    x = tap("clip_a", a.processSample(int(ch), x));
+                    const auto port = sustain.beginSample(int(ch), x, parameters.sustain, float(parameters.voicingMode));
+                    const auto clipped = a.processPort(int(ch), port);
+                    tap("sustain", static_cast<float>(clipped.base));
+                    sustain.finishSample(int(ch), clipped.base);
+                    x = tap("clip_a", static_cast<float>(clipped.output));
                     x = tap("clip_b", b.processSample(int(ch), x, float(parameters.clippingMode)));
-                    up.setSample(int(ch), int(i), clampAudio(x));
+                    x = tap("tone", tone.processSample(int(ch), x, parameters.tone, parameters.high));
+                    up.setSample(int(ch), int(i), tap("recovery", output.processSample(int(ch), x)));
                 }
         });
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
             for (int i = 0; i < buffer.getNumSamples(); ++i)
             {
-                const auto x = tap("tone", tone.processSample(ch, tap("downsampled", buffer.getSample(ch, i)), parameters.tone, parameters.high));
-                buffer.setSample(ch, i, tap("output", output.processSample(x, dbToGain(parameters.volumeDecibels))));
+                const auto x = tap("downsampled", buffer.getSample(ch, i));
+                buffer.setSample(ch, i, tap("output", x * dbToGain(parameters.volumeDecibels) * OutputStage::voltsToDigital));
             }
     }
     std::map<std::string, Statistics> statistics;
@@ -251,6 +255,22 @@ std::complex<double> sineResponse(double rate, double frequency, Process process
     return {2 * re / window / amplitude, 2 * im / window / amplitude};
 }
 
+void measureOversampledTone(const juce::File& folder)
+{
+    auto stream = csv(folder, "tone-oversampled.csv");
+    stream << "sample_rate,tone,high,frequency_hz,magnitude_db,phase_rad\n";
+    for (double rate : {88200.0, 96000.0, 176400.0, 192000.0, 352800.0, 384000.0, 768000.0})
+        for (float t : {0.0f, .5f, 1.0f})
+            for (float h : {0.0f, .5f, 1.0f})
+                for (double f : {100.0, 1000.0, 5000.0})
+                {
+                    ToneStack tone; tone.prepare(rate, blockSize, 1);
+                    const auto value = sineResponse(rate, f, [&](float x) { return tone.processSample(0, x, t, h); });
+                    stream << rate << ',' << t << ',' << h << ',' << f << ',' << 20 * std::log10(std::abs(value))
+                           << ',' << std::arg(value) << '\n';
+                }
+}
+
 void measureInputCircuit(const juce::File& folder)
 {
     auto stream = csv(folder, "input-response.csv");
@@ -286,7 +306,7 @@ void measureInputCircuit(const juce::File& folder)
 void measureInputDynamics(const juce::File& folder)
 {
     auto stream = csv(folder, "input-dynamics.csv");
-    stream << "sample_rate,oversampling,peak,max_sample_step,stereo_error,tail_peak\n";
+    stream << "sample_rate,oversampling,peak,max_sample_step,stereo_error,tail_peak,early_tail_peak\n";
     for (double rate : {44100.0, 48000.0, 96000.0})
         for (int mode = 0; mode < 3; ++mode)
         {
@@ -294,9 +314,9 @@ void measureInputDynamics(const juce::File& folder)
             FuzzParameters p = defaults(); p.oversamplingMode = mode;
             FuzzEngine engine; engine.updateParameters(p); engine.prepare(rate, blockSize, 2);
             juce::AudioBuffer<float> buffer(2, blockSize);
-            double peak = 0, maxStep = 0, channelError = 0, tail = 0;
+            double peak = 0, maxStep = 0, channelError = 0, tail = 0, earlyTail = 0;
             float previous = 0;
-            for (int offset = 0; offset < int(3 * rate); offset += blockSize)
+            for (int offset = 0; offset < int(8 * rate); offset += blockSize)
             {
                 const int part = std::min(5, int(offset / rate / .3));
                 const float settings[] = {0,1,.25f,.68f,0,1};
@@ -318,11 +338,40 @@ void measureInputDynamics(const juce::File& folder)
                     peak = std::max(peak, double(std::abs(x)));
                     maxStep = std::max(maxStep, double(std::abs(x - previous)));
                     channelError = std::max(channelError, double(std::abs(x - right)));
-                    if ((offset + i) / rate > 2.9) tail = std::max(tail, double(std::abs(x)));
+                    if ((offset + i) / rate > 2.9 && (offset + i) / rate < 3.0) earlyTail = std::max(earlyTail, double(std::abs(x)));
+                    if ((offset + i) / rate > 7.9) tail = std::max(tail, double(std::abs(x)));
                     previous = x;
                 }
             }
-            stream << rate << ',' << (1 << (mode + 1)) << ',' << peak << ',' << maxStep << ',' << channelError << ',' << tail << '\n';
+            stream << rate << ',' << (1 << (mode + 1)) << ',' << peak << ',' << maxStep << ',' << channelError << ',' << tail << ',' << earlyTail << '\n';
+        }
+}
+
+// Short deterministic traces for an independent bisection/KCL reference. Includes
+// source-resistance changes, both input polarities, and continuous mode morphs.
+void measureClipping(const juce::File& folder)
+{
+    auto stream = csv(folder, "clipping-feedback.csv");
+    stream << "case_id,sample_rate,selectable,sample,source,source_resistance,mode,base,output,diode_voltage,diode_current,residual,iterations\n";
+    int id = 0;
+    for (double rate : {88200.0, 192000.0, 768000.0})
+        for (int kind = 0; kind < 5; ++kind)
+        {
+            const bool selectable = kind != 0;
+            FeedbackClipper clip;
+            clip.prepare(rate, 1, selectable);
+            for (int i = 0; i < 2048; ++i)
+            {
+                const double source = .15 * std::sin(2 * juce::MathConstants<double>::pi * 350 * i / rate)
+                                    + (i > 700 && i < 1200 ? .03 : 0);
+                const double resistance = i < 1024 ? 30000 : 6200;
+                const float mode = kind == 4 ? float(2.0 * i / 2047) : float(std::max(0, kind - 1));
+                const auto r = clip.process(0, {source, resistance}, mode);
+                stream << id << ',' << rate << ',' << selectable << ',' << i << ',' << source << ',' << resistance << ',' << mode
+                       << ',' << r.base << ',' << r.output << ',' << r.diodeVoltage << ',' << r.diodeCurrent
+                       << ',' << r.residual << ',' << r.iterations << '\n';
+            }
+            ++id;
         }
 }
 
@@ -450,6 +499,7 @@ int main(int argc, char** argv)
         juce::StringArray di;
         bool toneOnly = false;
         bool inputOnly = false;
+        bool clippingOnly = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string arg(argv[i]);
@@ -457,11 +507,12 @@ int main(int argc, char** argv)
             else if (arg == "--di" && i + 1 < argc) di.add(argv[++i]);
             else if (arg == "--tone-only") toneOnly = true;
             else if (arg == "--input-only") inputOnly = true;
-            else throw std::runtime_error("Usage: PyramidFuzzMeasurements --output NEW_FOLDER [--tone-only | --input-only | --di WAV_OR_AIFF]...");
+            else if (arg == "--clipping-only") clippingOnly = true;
+            else throw std::runtime_error("Usage: PyramidFuzzMeasurements --output NEW_FOLDER [--tone-only | --input-only | --clipping-only | --di WAV_OR_AIFF]...");
         }
         if (output.isEmpty()) throw std::runtime_error("--output is required");
-        if ((toneOnly && inputOnly) || ((toneOnly || inputOnly) && !di.isEmpty()))
-            throw std::runtime_error("Choose full capture, tone-only, or input-only; DI is supported by full captures");
+        if (int(toneOnly) + int(inputOnly) + int(clippingOnly) > 1 || ((toneOnly || inputOnly || clippingOnly) && !di.isEmpty()))
+            throw std::runtime_error("Choose full, tone-only, input-only, or clipping-only; DI requires full capture");
         const auto folder = juce::File::getCurrentWorkingDirectory().getChildFile(output);
         if (folder.exists()) throw std::runtime_error("Output folder already exists; refusing to overwrite measurements");
         if (!folder.createDirectory()) throw std::runtime_error("Cannot create output folder");
@@ -478,20 +529,25 @@ int main(int argc, char** argv)
                  << ",\n  \"synthetic_dry_peak_dbfs\": -18,\n  \"synthetic_seconds\": 5,\n  \"synthetic_signal_ends_seconds\": 4,"
                  << "\n  \"synthetic_end_fade_seconds\": 0.02,\n  \"decay_window_seconds\": 0.05,"
                  << "\n  \"di_resampling\": false,\n  \"di_normalization\": false,\n  \"di_appended_silence_seconds\": 1,"
-                 << "\n  \"stage_names\": [\"dry\",\"input_voicing\",\"pre_gain\",\"sustain\",\"clip_a\",\"clip_b\",\"downsampled\",\"tone\",\"output\"],"
-                 << "\n  \"input_domain\": \"oversampled\",\n  \"input_model\": \"nominal Q4 feedback and loaded R24/C4/C5 network\"\n}\n";
+                 << "\n  \"stage_names\": [\"dry\",\"input_voicing\",\"pre_gain\",\"sustain\",\"clip_a\",\"clip_b\",\"tone\",\"recovery\",\"downsampled\",\"output\"],"
+                 << "\n  \"input_domain\": \"oversampled\",\n  \"input_model\": \"nominal Q4 feedback and R24/C4/C5 source port into nonlinear Q3\"\n}\n";
         protocol.close();
-        if (!inputOnly)
+        if (!inputOnly && !clippingOnly)
         {
             std::cout << "Measuring tone impulse grid..." << std::endl;
-            measureTone(folder); measureToneDynamics(folder);
+            measureTone(folder); measureToneDynamics(folder); measureOversampledTone(folder);
         }
-        if (!toneOnly)
+        if (!toneOnly && !clippingOnly)
         {
             std::cout << "Measuring input and Sustain circuits..." << std::endl;
             measureInputCircuit(folder); measureInputDynamics(folder);
         }
         if (!toneOnly && !inputOnly)
+        {
+            std::cout << "Measuring diode feedback..." << std::endl;
+            measureClipping(folder);
+        }
+        if (!toneOnly && !inputOnly && !clippingOnly)
         {
             std::cout << "Measuring gain, harmonics, and stage taps..." << std::endl;
             measureGain(folder);

@@ -9,7 +9,7 @@ Pyramid Fuzz is a JUCE guitar fuzz for macOS, inspired by a modified Ram's Head 
 - **Tone** sweeps the passive tone network from darker to brighter; **High** reduces the low-pass branch's series resistance to extend its upper response. These passive controls interact.
 - **Volume** sets the output level.
 - **Voicing** selects the 39 kOhm Hi input or the substantially lower-drive 390 kOhm Lo input. Try Hi for dense fuzz and Lo for cleaner response; their levels intentionally differ.
-- **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off retains the gain stage with a more open response.
+- **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off opens its diode branch while retaining the amplifier; silicon uses opposing single diodes, and germanium uses lower-threshold asymmetric one/two-junction branches. Their natural output levels differ.
 - **Oversampling** selects 2x, 4x, or 8x processing of the nonlinear stages. The default is 4x. Changing it briefly fades the signal while the processing is reset.
 
 The editor also displays input and output levels. The plugin supports mono and stereo input/output, including mono input to stereo output.
@@ -48,13 +48,15 @@ cmake --build build --config Debug --target PyramidFuzzDspTests PyramidFuzzMeasu
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-The checks cover clipping-knee continuity, finite output, stereo consistency, and signal flow at 44.1, 48, and 96 kHz across the clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain useful steps for assessing sound and host behavior.
+The checks cover independent feedback-circuit agreement, clipping-mode distinction, tone/input responses, DC decay, hot inputs, stereo consistency, and signal flow at 44.1, 48, and 96 kHz across clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain useful steps for assessing sound and host behavior.
 
 When Python 3 is available, CTest also runs independent passive-circuit reference checks. The optional `PyramidFuzzMeasurements` target captures tone responses, stage levels, harmonics, and unnormalized synthetic/DI audio without changing the plugin DSP. See [the baseline review](docs/baseline-review.md) for commands, preserved-build details, results, and proposed acceptance limits. Generated bundles live under the ignored `artifacts/` directory.
 
 The tone-network correction and dark-to-bright mapping intentionally change the sound of existing settings. The corrected network passes the independent circuit-response checks; see [the Step 2 review](docs/tone-correction-review.md) for measurements and listening comparisons. The original build remains archived separately.
 
 The [Step 3 input/Sustain revision](docs/input-sustain-review.md) derives input loading, fixed preamp response/headroom, and the loaded Sustain network from schematic values and explicit nominal transistor assumptions. It passes independent circuit checks, including hot-input/control sweeps. Existing settings intentionally sound different; the positively reviewed Step 2 build is also preserved for comparison.
+
+The [Step 4 clipping/recovery revision](docs/clipping-recovery-review.md) uses nonlinear diode-feedback branches with capacitor memory, a component-derived recovery stage and explicit voltage scaling. Germanium follows the schematic's one/two-diode asymmetry; all nonlinear stages now run inside oversampling. Device curves and remaining source/load approximations are documented. Revised and previous builds and listening files are retained locally.
 
 ## Project layout
 

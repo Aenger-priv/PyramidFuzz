@@ -1,17 +1,72 @@
 {
-  "description": "Independent AC netlist transcribed from Pharaoh Big Muff Clone Schematic.jpg; 22 nF C8 variant. Ground and an ideal unit source are known voltages.",
-  "known_voltages": {"0": 0.0, "source": 1.0},
-  "values": {"Rsource": 10000.0, "R5": 470000.0, "Rload": 220000.0, "C9": 1e-8, "C8": 2.2e-8, "C3": 4.7e-8},
+  "description": "Independent AC netlist transcribed from Pharaoh Big Muff Clone Schematic.jpg; 22 nF C8 variant. Ground and an ideal unit source are known voltages. Step 4: source/load derived independently from nominal Q2/Q1 small-signal KCL; diode-dependent source loading remains approximate.",
+  "known_voltages": {
+    "0": 0.0,
+    "source": 1.0
+  },
+  "values": {
+    "Rsource": 4886.413480687481,
+    "R5": 470000.0,
+    "Rload": 45912.231610857525,
+    "C9": 1e-08,
+    "C8": 2.2e-08,
+    "C3": 4.7e-08
+  },
   "output": "recovery",
   "branches": [
-    ["R", "source", "collector", "Rsource"],
-    ["C", "collector", "bright", "C9"],
-    ["R", "bright", "0", "R5"],
-    ["R", "collector", "dark", "R8"],
-    ["C", "dark", "0", "C8"],
-    ["R", "bright", "wiper", "Rbright"],
-    ["R", "dark", "wiper", "Rdark"],
-    ["C", "wiper", "recovery", "C3"],
-    ["R", "recovery", "0", "Rload"]
+    [
+      "R",
+      "source",
+      "collector",
+      "Rsource"
+    ],
+    [
+      "C",
+      "collector",
+      "bright",
+      "C9"
+    ],
+    [
+      "R",
+      "bright",
+      "0",
+      "R5"
+    ],
+    [
+      "R",
+      "collector",
+      "dark",
+      "R8"
+    ],
+    [
+      "C",
+      "dark",
+      "0",
+      "C8"
+    ],
+    [
+      "R",
+      "bright",
+      "wiper",
+      "Rbright"
+    ],
+    [
+      "R",
+      "dark",
+      "wiper",
+      "Rdark"
+    ],
+    [
+      "C",
+      "wiper",
+      "recovery",
+      "C3"
+    ],
+    [
+      "R",
+      "recovery",
+      "0",
+      "Rload"
+    ]
   ]
 }

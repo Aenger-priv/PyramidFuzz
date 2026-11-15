@@ -72,12 +72,28 @@ def validate(path):
                 failures.append("Unexpected control-sweep transient")
             if values["stereo_error"] > 1e-6 or values["tail_peak"] > 1e-6:
                 failures.append("Dynamic channel or decay check failed")
+    oversampled = rows(path.with_name("tone-oversampled.csv"))
+    expected_os = {(r,t,h,f) for r in (88200,96000,176400,192000,352800,384000,768000)
+                   for t in (0,.5,1) for h in (0,.5,1) for f in (100,1000,5000)}
+    measured_os = set()
+    worst_os_gain = worst_os_phase = 0.0
+    for row in oversampled:
+        r,t,h,f,g,a = (float(row[k]) for k in ("sample_rate","tone","high","frequency_hz","magnitude_db","phase_rad"))
+        if not all(math.isfinite(x) for x in (r,t,h,f,g,a)): failures.append("Non-finite oversampled tone response"); continue
+        measured_os.add((int(r),t,h,int(f)))
+        target = response(f,t,h,sample_rate=r)
+        worst_os_gain = max(worst_os_gain,abs(g-db(target)))
+        worst_os_phase = max(worst_os_phase,abs(math.degrees(math.remainder(a-phase(target),2*math.pi))))
+    if measured_os != expected_os or len(oversampled) != len(expected_os): failures.append("Incomplete oversampled tone grid")
+    if worst_os_gain > .1 or worst_os_phase > 1: failures.append("Oversampled tone error exceeds 0.1 dB / 1 degree")
     return {"passed": not failures, "failures": failures, "curves": len(curves),
             "checked_points": checked, "max_magnitude_error_db": worst_gain,
             "max_phase_error_degrees": worst_phase, "max_impulse_tail_peak": tail_peak,
             "worst_magnitude_row": worst_gain_row, "worst_phase_row": worst_phase_row,
             "tone_only_control_sweeps": dynamics,
-            "assumptions": "22 nF C8; 10 kOhm source; 220 kOhm load; intended dark-to-bright UI mapping; trapezoidal AC reference"}
+            "oversampled_points": len(oversampled), "max_oversampled_magnitude_error_db": worst_os_gain,
+            "max_oversampled_phase_error_degrees": worst_os_phase,
+            "assumptions": "22 nF C8; nominal Q2 source and Q1 recovery load from reference JSON; dark-to-bright mapping; trapezoidal AC reference"}
 
 
 def main():

@@ -1,156 +1,125 @@
 # Architecture
 
-## Current implementation
+## Plugin and parameters
 
-The repository is now set up as a JUCE audio plugin shell with a first-pass fuzz engine:
+`PyramidFuzzAudioProcessor` owns the lifecycle, buses and
+`AudioProcessorValueTreeState`. It initializes DSP from saved parameters, splits
+oversized blocks into prepared chunks, and reports integer oversampling latency.
+The editor owns the controls and parameter attachments. DSP lives separately in
+`src/dsp/`; offline measurements and independent references live in `tools/`.
 
-- `PyramidFuzzAudioProcessor`
-  - Owns bus layout and plugin lifecycle
-  - Owns `AudioProcessorValueTreeState`
-  - Exposes the parameter layout required by the product brief
-  - Pulls parameter values into a modular DSP engine each block
-  - Reports integer oversampling latency back to the host
-  - Initializes the DSP from the current parameter state and splits oversized host blocks into preallocated chunks
-
-- `PyramidFuzzAudioProcessorEditor`
-  - Owns control widgets and parameter attachments
-  - Presents the minimum stompbox-style UI shell for the core controls
-
-## App icon
-
-`assets/generated/pyramid-fuzz-icon.png` is the source artwork for the macOS
-application icon. It uses a simplified black/gold pyramid-and-eye motif derived
-from the pedal panel's visual identity. `ICON_BIG` in `juce_add_plugin` lets JUCE
-generate `Icon.icns`, add it to bundle resources, and set the bundle's icon entry.
-The adjacent JSON records the built-in image-generation prompt and style reference.
-Icon generation is not part of the build and requires no network access to rebuild.
-
-## DSP blocks
-
-DSP is organized under `src/dsp/` as discrete blocks:
-
-- `InputVoicingStage`
-  - Applies input trim and the C1 / 39 kOhm or 390 kOhm network into nominal Q4 input loading
-  - Includes R14 and feedback-dependent loading from R9/C10 and the reduced Q4 model
-  - Runs both physical endpoints for a smooth Hi/Lo morph; shares the oversampled rate with the preamp
-
-- `PreGainStage`
-  - Fixed Q4 collector/base response from R13/R22/R9/C10 and a prepared nominal operating point
-  - Uses a monotonic soft limit with asymmetric headroom derived from the nominal bias and 9 V supply
-  - Does not depend on Sustain; its output is the polarity-normalized open-circuit source equivalent
-
-- `SustainStage`
-  - Models C4, R24/R23, C5/R19 and the nominal Q3 input load after Q4
-  - Uses a frequency-dependent RC source equivalent for Q4, including C10 feedback loading
-  - Three capacitor states and a cached 2x2 trapezoidal solve; endpoints remain nonzero because R23 is 1 kOhm
-
-- `InputCircuit`
-  - Named circuit values, nominal bias/small-signal calculations at preparation, and double-state linear filters
-  - Beta/Vbe and small-signal load approximations are documented in the Step 3 review
-
-- `ClippingStageA`
-  - First major fuzz generator
-  - Uses pre/post filtering and a dense soft-to-hard transfer with cubic weighting for sustain and compression
-  - Fixed 18x internal drive; its former arbitrary 92 Hz coupling filter is replaced by `SustainStage`
-
-- `ClippingStageB`
-  - Second major clipping stage
-  - Per-mode internal drive is fixed; the Sustain divider changes its incoming signal instead
-  - Uses a continuous-slope diode knee to avoid extra high-frequency content at the clipping threshold
-  - Offers three continuously morphable internal responses:
-    - Off: lightly limited, more open
-    - Silicon: harder knee, brighter ceiling, tighter attack
-    - Germanium: lower threshold, softer knee, slight asymmetry
-
-- `ToneStack`
-  - Solves a five-node passive network by trapezoidal nodal analysis
-  - Uses 0.022 uF C8 and 25 kOhm R8, with assumed 10 kOhm source and 220 kOhm recovery loading
-  - Step 2 corrects R8 to series resistance and C8 to ground, preserving the C9/R5 high-pass branch and C3 output coupling
-  - Tone runs from dark to bright; increasing High reduces R8 and raises the low-pass corner. Passive source loading means its effect depends on Tone
-  - The independent AC grid check covers 75 settings at 44.1/48/96 kHz; the source/load assumptions remain approximations
-
-- `HighControlFilter`
-  - Retained as a reusable contour block, but bypassed in the main path
-  - `High` changes the modeled series R8 resistance in `ToneStack`
-
-- `OutputStage`
-  - Applies recovery gain and a small amount of final glue saturation before volume scaling
-
-- `OversamplingEngine`
-  - Wraps JUCE oversamplers for 2x / 4x / 8x operation
-  - 4x is the default working mode for v1; integer-latency compensation matches the reported host latency
-
-- `FuzzEngine`
-  - Coordinates parameter smoothing, oversampling selection, stage ordering, and channel-safe processing
-
-## Parameter model
-
-The processor exposes the v1 user-facing parameters:
-
-- `Input`
-- `Sustain`
-- `Tone`
-- `High`
-- `Volume`
-- `Voicing`
-- `Clipping Mode`
-- `Oversampling`
-
-Implementation notes:
-
-- `Input`, `Sustain`, `Tone`, `High`, and `Volume` are smoothed in the DSP engine.
-- `Voicing` and `Clipping Mode` are handled as smoothed morph values rather than hard edge switches, which reduces clicks when changed.
-- `Oversampling` changes at block boundaries and re-prepares the nonlinear stages for the new oversampled rate. The wet path fades down and back up over 6 ms around the state reset, preventing an audible discontinuity when the quality setting changes.
+Parameter IDs, ranges, defaults and choice ordering remain unchanged through
+Steps 2–4. Input, Sustain, Tone, High and Volume use continuous smoothing;
+Voicing and Clipping use 10 ms morphs. The user chose revised sound for existing
+sessions, with original builds archived separately, rather than a legacy DSP
+model inside the new plugin.
 
 ## Signal path
 
-Current processing order:
+1. Upsample with JUCE's 2x/4x/8x filtered oversampler; default 4x.
+2. Input trim and C1/Hi–Lo source-resistance conditioning.
+3. Fixed Q4 preamp response and headroom.
+4. C4, Sustain R24/R23, C5/R19 into the nonlinear Q3 input port.
+5. Q3 amplifier with R17/C12 and C6/silicon diode feedback.
+6. C13/R12 coupling into Q2, with R15/C11 and selectable C7/diode feedback.
+7. Passive Tone/High network including C3 into nominal Q1 input loading.
+8. Q1 recovery headroom and C2/R26 output coupling.
+9. Downsample, apply the common volts-to-digital scale, Volume and quality fade.
 
-1. Upsample into the nonlinear domain
-2. Input voicing and trim
-3. Fixed PreGainStage
-4. SustainStage with C4/C5 coupling and loading
-5. Fixed-gain ClippingStageA
-6. Fixed-gain ClippingStageB with selectable diode response
-7. Downsample back to the host sample rate
-8. ToneStack
-9. OutputStage
+All nonlinearities, including recovery, run inside oversampling. No arbitrary
+post-clip low-pass or duplicate C3 high-pass is present. The final Volume stage
+is linear and does not clamp over-range output.
 
-When the oversampling mode changes, the output stage is briefly muted while the nonlinear filters and oversampler are reconfigured, then returned with a 6 ms linear fade. This is deliberately a small quality-switch interruption rather than a click or burst of stale filter state.
+## DSP blocks
 
-## Oversampling placement
+| File/block | Responsibility |
+| --- | --- |
+| `InputCircuit` | Named input/component values, nominal bias and small-signal calculations, linear source equivalents and double-state filters. No runtime transistor-level bias solve. |
+| `InputVoicingStage` | C1 and 39/390 kOhm Hi/Lo paths into Q4's frequency-dependent input load. Both endpoints run continuously for smooth switching. |
+| `PreGainStage` | Fixed nominal Q4 feedback response from R13/R22/R9/C10, followed by monotonic bias-derived soft headroom. Output is the polarity-normalized open-circuit source equivalent. |
+| `SustainStage` | C4/R24/R23/C5/R19 plus Q4's nominal RC source equivalent. Exposes a Thevenin port; Q3's solved normalized base voltage updates capacitor currents. Its nominal-load wrapper remains available for isolated AC checks. |
+| `FeedbackClipper` | Reduced voltage amplifier, resistor/capacitor feedback, series capacitor and nonlinear diode feedback. One bounded bracketed Newton solve per sample; warm starting and bisection fallback; double capacitor state. |
+| `ClippingStageA` | Q3 with fixed opposing 1N914-like diodes. |
+| `ClippingStageB` | Q2 with smoothly weighted Off/1N4001-like/Ge-like branches. Ge has one forward and two reverse junctions. The same amplifier, R/C feedback and capacitor state serve every mode. |
+| `InterstageCoupling` | C13/R12 and a nominal linear Q3 output-impedance equivalent. Receives Q2's actual base voltage to update coupling currents. |
+| `ToneStack` | Five-node passive trapezoidal solve: C9/R5 bright arm, series R8/shunt C8 dark arm, R25 wiper and C3. Double states and cached Cholesky factorization. |
+| `OutputStage` | Nominal Q1 gain/headroom, C2 output coupling and R26 load. Defines the common 1/3 volts-to-digital output scale. Volume is applied after downsampling. |
+| `OversamplingEngine` | JUCE oversamplers, quality selection and integer-latency compensation. |
+| `FuzzEngine` | Prepared buffers, smoothing, stage order, per-channel processing and quality-change fade. |
 
-Oversampling wraps the input/preamp/Sustain network and the main nonlinear stages:
+`HighControlFilter` remains a reusable unused contour block. The main path's
+High control operates R8 directly in `ToneStack`.
 
-- `InputVoicingStage`
-- `PreGainStage`
-- `SustainStage`
-- `ClippingStageA`
-- `ClippingStageB`
+## Circuit conventions and remaining approximations
 
-This keeps the strongest alias generators inside the oversampled path while leaving the later tonal shaping at base rate to control CPU use.
+Tone=0 selects the dark arm; Tone=1 selects the bright arm. Increasing High
+reduces R8 and extends the dark arm's upper response. The passive controls
+interact. C8 is 22 nF, the chosen drawing variant. Pot ends use small nonzero
+resistances for a well-conditioned circuit solve.
 
-## Current approximations
+The Step 4 tone source/load are nominal 4.886 kOhm/45.91 kOhm, derived from Q2/Q1
+small-signal KCL. Earlier Step 2–3 captures used 10 kOhm/220 kOhm and remain
+unchanged. The independent reference JSON now describes the revised loading.
 
-- The tone stack solves a simplified passive network with approximated source and load impedances; it is not a complete transistor-level circuit simulation.
-- The clipping stages are tuned transfer functions rather than literal diode equations.
-- Filter controls that are implemented as path blends are smoothed musically, but the design is still intended for refinement by ear.
-- The Step 3 input model uses nominal beta/Vbe, a low-impedance source, linear feedback shaping with a separate preamp headroom limit, and a nominal midband Q3 input resistance. It does not reproduce pickup/interface loading upstream of conversion or large-signal transistor/diode loading.
-- Clipping gain, transfer functions and remaining bandwidth approximations await Step 4 calibration. Stage A retains its previous full-drive constant and Stage B its previous full-drive per-mode constants.
-- The 24 Hz blocker in `ClippingStageB` is attributed to C3 in its comment, while `ToneStack` already models C3 after the wiper. This needs resolution during the coupling review.
+Input uses 1 digital unit = 1 model volt; output uses 3 model volts = 1 digital
+unit before Volume. This is an explicit convention, not a calibrated
+pickup/interface/pedal relationship. Natural clipping-mode level differences
+are preserved. Only exported listening files receive matching adjustments.
 
-## Measurement baseline
+Device beta, Vbe, thermal voltage and diode Is/N/series-continuation values are
+nominal assumptions. All four transistors remain silicon; the material switch
+selects only Q2's feedback diodes. Diode curves are not fitted to measured parts.
+Voltage-amplifier soft headroom substitutes for full transistor nonlinearity.
+The model omits temperature, junction charge, reverse breakdown, noise and
+parameter spread.
 
-[Step 1's review](baseline-review.md) records the unchanged `b98a3be` DSP, archived original builds, circuit variant, independent AC netlist, measured results, session policy, and proposed gates. `tools/Measurements.cpp` uses production DSP classes; a fixed-control tap adapter is checked sample by sample against `FuzzEngine`. It is an offline tool and does not add branches or instrumentation to the plugin's audio callback. The independent Python reference imports no production DSP. Large captures are local under ignored `artifacts/`.
+Input/Sustain uses an actual nonlinear Q3 base port, but output-source equivalents
+remain nominal and unilateral. They do not close the complete bidirectional
+large-signal circuit. Q3's output equivalent assumes a 30 kOhm source; Q1's
+output equivalent assumes a 50 kOhm tone-wiper source. Source impedances do not
+track every control position or diode conduction. See the
+[clipping/recovery review](clipping-recovery-review.md) for all component values,
+reference equations and the switch-drawing ambiguity.
 
-[Step 2's review](tone-correction-review.md) records the corrected passive network, intended control mapping and positive live test with humbuckers. Its build and audio are retained as the comparison point for Step 3.
+## Processing changes
 
-[Step 3's review](input-sustain-review.md) records the derived input and Sustain path. CTest independently checks nominal DC KCL, small-signal AC responses, coupled-network agreement, hot inputs, and smoothed control changes. The tone network, parameter model and recovery stage are unchanged in Step 3. The measurement adapter now records nine stages; input/preamp/Sustain taps run at the oversampled rate. Listening compensation remains confined to exported comparison files.
+The host-rate smoother values are held for each group of oversampled samples.
+There is no allocation in the ordinary fixed-quality sample loop. Quality
+changes re-prepare state at a block boundary with a 6 ms fade down/up. Step 4
+adds tone/recovery/C2 to the state reset because they now run at the changed
+rate. This briefly interrupts the wet signal.
 
-## Refinement priorities
+Preparation during quality changes, latency updates, rapid quality reversals,
+CPU and quantitative aliasing limits still need Step 5 qualification. Passing
+Step 4's mode-change safety tests does not establish host-safe quality automation.
 
-1. Audition the input/Sustain revision against the retained Step 2 build, especially Hi/Lo contrast, cleanup, and low strings.
-2. Calibrate clipping, remaining coupling, and recovery against measurements and listening; revisit recovery loading with that work.
-3. Capture a real guitar DI for repeatable listening comparisons.
-4. Measure aliasing, CPU, quality switching, and host automation behavior.
-5. Complete the UI/UX and GarageBand validation gates in the [revision plan](implementation-review-plan.md).
+## Measurements and retained revisions
+
+`tools/Measurements.cpp` uses production stages in a fixed-control tap adapter;
+every render is checked sample by sample against `FuzzEngine`. Ten taps record
+`dry`, `input_voicing`, `pre_gain`, `sustain` (solved normalized Q3 base), `clip_a`, `clip_b`,
+`tone`, `recovery`, `downsampled`, and `output`. Dry/downsampled/output are host
+rate; the other taps are oversampled. Stage values inside the model are volts,
+while final output includes digital scaling and Volume.
+
+Python references independently assemble DC/AC KCL and solve nonlinear feedback
+by bisection. CTest covers DSP behavior, reference sanity, the tone grid at base
+and oversampled rates, input/Sustain AC, feedback traces, and long DC decay.
+Large captures, archives, figures and listening WAVs are ignored under
+`artifacts/`. Capture manifests freeze source hashes, toolchain and raw data.
+
+- [Step 1](baseline-review.md): original `b98a3be` baseline and session policy.
+- [Step 2](tone-correction-review.md): passive topology/direction correction;
+  positively auditioned with Les Paul humbuckers.
+- [Step 3](input-sustain-review.md): input loading, fixed preamp and Sustain placement.
+- [Step 4](clipping-recovery-review.md): feedback clipping, coupling and recovery.
+
+The current gate is live guitar review of Step 4. Broader host, CPU and aliasing
+qualification follows separately in the [implementation plan](implementation-review-plan.md).
+
+## App icon
+
+`assets/generated/pyramid-fuzz-icon.png` supplies the black/gold pyramid-and-eye
+artwork. Its adjacent JSON records the generation prompt and style reference.
+CMake's `ICON_BIG` lets JUCE package `Icon.icns` and the bundle icon entry.
+Rebuilding requires no image-generation service or network access.

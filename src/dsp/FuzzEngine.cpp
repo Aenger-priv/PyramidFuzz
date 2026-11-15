@@ -8,9 +8,7 @@ void FuzzEngine::prepare(double newSampleRate, int maximumBlockSize, int channel
     maxBlockSize = maximumBlockSize;
     numChannels = channels;
 
-    toneStack.prepare(sampleRate, maxBlockSize, numChannels);
     highControlFilter.prepare(sampleRate, maxBlockSize, numChannels);
-    outputStage.prepare(sampleRate, maxBlockSize, numChannels);
     oversamplingEngine.prepare(numChannels, maxBlockSize);
     activeOversamplingMode = juce::jlimit(0, 2, currentParameters.oversamplingMode);
     oversamplingEngine.setMode(activeOversamplingMode);
@@ -128,6 +126,8 @@ void FuzzEngine::processBlock(juce::AudioBuffer<float>& buffer)
             const auto inputGain = inputGainValues[static_cast<size_t>(baseIndex)];
             const auto voicing = voicingValues[static_cast<size_t>(baseIndex)];
             const auto clippingMode = clippingModeValues[static_cast<size_t>(baseIndex)];
+            const auto tone = toneValues[static_cast<size_t>(baseIndex)];
+            const auto high = highValues[static_cast<size_t>(baseIndex)];
 
             for (auto channel = 0; channel < oversampledChannels; ++channel)
             {
@@ -135,27 +135,26 @@ void FuzzEngine::processBlock(juce::AudioBuffer<float>& buffer)
                 auto nonlinearSample = channelData[sample];
                 nonlinearSample = inputVoicingStage.processSample(channel, nonlinearSample, inputGain, voicing);
                 nonlinearSample = preGainStage.processSample(channel, nonlinearSample);
-                nonlinearSample = sustainStage.processSample(channel, nonlinearSample, sustain, voicing);
-                nonlinearSample = clippingStageA.processSample(channel, nonlinearSample);
+                const auto port = sustainStage.beginSample(channel, nonlinearSample, sustain, voicing);
+                const auto firstClip = clippingStageA.processPort(channel, port);
+                sustainStage.finishSample(channel, firstClip.base);
+                nonlinearSample = static_cast<float>(firstClip.output);
                 nonlinearSample = clippingStageB.processSample(channel, nonlinearSample, clippingMode);
-                channelData[sample] = clampAudio(nonlinearSample);
+                nonlinearSample = toneStack.processSample(channel, nonlinearSample, tone, high);
+                channelData[sample] = outputStage.processSample(channel, nonlinearSample);
             }
         }
     });
 
     for (auto sample = 0; sample < numSamples; ++sample)
     {
-        const auto tone = toneValues[static_cast<size_t>(sample)];
-        const auto high = highValues[static_cast<size_t>(sample)];
         const auto volume = volumeValues[static_cast<size_t>(sample)];
         const auto oversamplingTransition = oversamplingTransitionValues[static_cast<size_t>(sample)];
 
         for (auto channel = 0; channel < numChannels; ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
-            auto processedSample = channelData[sample];
-            processedSample = toneStack.processSample(channel, processedSample, tone, high);
-            channelData[sample] = outputStage.processSample(processedSample, volume) * oversamplingTransition;
+            channelData[sample] *= volume * OutputStage::voltsToDigital * oversamplingTransition;
         }
     }
 }
@@ -175,6 +174,8 @@ void FuzzEngine::updateNonlinearSampleRate()
     sustainStage.prepare(oversampledRate, oversampledBlockSize, numChannels);
     clippingStageA.prepare(oversampledRate, oversampledBlockSize, numChannels);
     clippingStageB.prepare(oversampledRate, oversampledBlockSize, numChannels);
+    toneStack.prepare(oversampledRate, oversampledBlockSize, numChannels);
+    outputStage.prepare(oversampledRate, oversampledBlockSize, numChannels);
 }
 
 } // namespace pyramidfuzz::dsp

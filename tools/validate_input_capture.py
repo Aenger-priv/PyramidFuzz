@@ -80,14 +80,14 @@ def validate(folder):
         # These are output safety bounds, not proof of inaudible automation.
         if v["peak"] > .9 or v["max_sample_step"] > .15 or v["stereo_error"] > 1e-6:
             failures.append("Hot input or control-switching safety check failed")
-        if v["tail_peak"] > 1e-4: failures.append("Hot-input tail did not settle")
+        if v["tail_peak"] > 1e-4: failures.append("Hot-input tail did not settle after C2 discharge window")
     return {"passed": not failures, "failures": failures, "response_cases": len(measured),
             "max_block_magnitude_error_db": worst_gain, "max_block_phase_error_degrees": worst_phase,
             "max_coupled_magnitude_error_db": coupled_gain, "max_coupled_phase_error_degrees": coupled_phase,
             "q4_bias": bias("q4"), "q3_input_resistance_ohms": input_resistance("q3"),
             "q4_midband_output_ohms": [output_resistance(v) for v in (0,1)],
             "hot_input_dynamics": dynamic,
-            "limits": "Nominal reduced small-signal circuit only; Q3 load is a midband resistance; no pickup, interface-level or physical-pedal calibration."}
+            "limits": "Input/Sustain isolated AC uses nominal Q3 load; engine uses its nonlinear base port. Eight-second dynamics allow physical C2 discharge; early_tail_peak reports the original three-second window. No physical-pedal calibration."}
 
 
 def main():
