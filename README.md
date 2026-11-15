@@ -10,7 +10,7 @@ Pyramid Fuzz is a JUCE guitar fuzz for macOS, inspired by a modified Ram's Head 
 - **Volume** sets the output level.
 - **Voicing** selects the 39 kOhm Hi input or the substantially lower-drive 390 kOhm Lo input. Try Hi for dense fuzz and Lo for cleaner response; their levels intentionally differ.
 - **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off opens its diode branch while retaining the amplifier; silicon uses opposing single diodes, and germanium uses lower-threshold asymmetric one/two-junction branches. Their natural output levels differ.
-- **Oversampling** selects 2x, 4x, or 8x processing of the nonlinear stages. The default is 4x. Changing it briefly fades the signal while the processing is reset.
+- **Oversampling** selects 2x, 4x, or 8x processing of the nonlinear stages. The default is 4x. Changing it briefly fades the signal while prepared processing state is reset; reported latency stays at six samples.
 
 The editor also displays input and output levels. The plugin supports mono and stereo input/output, including mono input to stereo output.
 
@@ -57,6 +57,8 @@ The tone-network correction and dark-to-bright mapping intentionally change the 
 The [Step 3 input/Sustain revision](docs/input-sustain-review.md) derives input loading, fixed preamp response/headroom, and the loaded Sustain network from schematic values and explicit nominal transistor assumptions. It passes independent circuit checks, including hot-input/control sweeps. Existing settings intentionally sound different; the positively reviewed Step 2 build is also preserved for comparison.
 
 The [Step 4 clipping/recovery revision](docs/clipping-recovery-review.md) uses nonlinear diode-feedback branches with capacitor memory, a component-derived recovery stage and explicit voltage scaling. Germanium follows the schematic's one/two-diode asymmetry; all nonlinear stages now run inside oversampling. Device curves and remaining source/load approximations are documented. Revised and previous builds and listening files are retained locally.
+
+The [Step 5 processing review](docs/processing-quality-review.md) documents prepared quality paths, fixed six-sample latency, processor state/routing tests and CPU/alias measurements. Use 4x for playing; try 8x for bright high-drive sounds when CPU allows. At 96 kHz, 8x stereo with a 32-frame buffer remains CPU-heavy.
 
 ## Project layout
 

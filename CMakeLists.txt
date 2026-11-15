@@ -47,7 +47,7 @@ target_sources(PyramidFuzz
         src/dsp/DspUtilities.h
         src/dsp/FuzzEngine.cpp
         src/dsp/FuzzEngine.h
-        src/dsp/HighControlFilter.h
+        src/dsp/NonlinearPath.h
         src/dsp/InputVoicingStage.h
         src/dsp/InputCircuit.h
         src/dsp/SustainStage.h
@@ -84,7 +84,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
     src/dsp/DspUtilities.h
     src/dsp/FuzzEngine.cpp
     src/dsp/FuzzEngine.h
-    src/dsp/HighControlFilter.h
+    src/dsp/NonlinearPath.h
     src/dsp/InputVoicingStage.h
     src/dsp/InputCircuit.h
     src/dsp/SustainStage.h
@@ -106,6 +106,12 @@ if(BUILD_TESTING)
     target_link_libraries(PyramidFuzzDspTests PRIVATE juce::juce_audio_utils juce::juce_dsp)
     add_test(NAME PyramidFuzzDspTests COMMAND PyramidFuzzDspTests)
 
+    add_executable(PyramidFuzzProcessorTests tests/ProcessorTests.cpp)
+    target_include_directories(PyramidFuzzProcessorTests PRIVATE src "$<TARGET_PROPERTY:PyramidFuzz,JUCE_GENERATED_SOURCES_DIRECTORY>")
+    target_compile_definitions(PyramidFuzzProcessorTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(PyramidFuzzProcessorTests PRIVATE PyramidFuzz PyramidFuzzAssets juce::juce_audio_utils juce::juce_dsp)
+    add_test(NAME PyramidFuzzProcessorTests COMMAND PyramidFuzzProcessorTests)
+
     # Offline measurements use the production stages without changing plugin DSP.
     juce_add_console_app(PyramidFuzzMeasurements PRODUCT_NAME "Pyramid Fuzz Measurements")
     juce_generate_juce_header(PyramidFuzzMeasurements)
@@ -113,6 +119,13 @@ if(BUILD_TESTING)
     target_include_directories(PyramidFuzzMeasurements PRIVATE src)
     target_compile_definitions(PyramidFuzzMeasurements PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(PyramidFuzzMeasurements PRIVATE juce::juce_dsp juce::juce_audio_formats)
+
+    juce_add_console_app(PyramidFuzzQualityMeasurements PRODUCT_NAME "Pyramid Fuzz Quality Measurements")
+    juce_generate_juce_header(PyramidFuzzQualityMeasurements)
+    target_sources(PyramidFuzzQualityMeasurements PRIVATE tools/QualityMeasurements.cpp src/dsp/FuzzEngine.cpp)
+    target_include_directories(PyramidFuzzQualityMeasurements PRIVATE src)
+    target_compile_definitions(PyramidFuzzQualityMeasurements PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(PyramidFuzzQualityMeasurements PRIVATE juce::juce_dsp juce::juce_audio_formats)
 
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)

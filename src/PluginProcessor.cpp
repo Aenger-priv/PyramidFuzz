@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cstdlib>
 
 PyramidFuzzAudioProcessor::PyramidFuzzAudioProcessor()
     : AudioProcessor(BusesProperties()
@@ -11,7 +12,7 @@ PyramidFuzzAudioProcessor::PyramidFuzzAudioProcessor()
 
 void PyramidFuzzAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    const auto channels = juce::jmax(getTotalNumOutputChannels(), 1);
+    const auto channels = juce::jmax(getTotalNumInputChannels(), 1);
     preparedBlockSize = juce::jmax(1, samplesPerBlock);
     fuzzEngine.updateParameters(readParameters());
     fuzzEngine.prepare(sampleRate, preparedBlockSize, channels);
@@ -52,21 +53,14 @@ void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
     const auto numInputChannels = getTotalNumInputChannels();
     const auto numOutputChannels = getTotalNumOutputChannels();
     const auto numSamples = buffer.getNumSamples();
+    if (numSamples == 0) return;
     float inputPeak = 0.0f;
 
     for (auto channel = 0; channel < numInputChannels; ++channel)
         inputPeak = juce::jmax(inputPeak, buffer.getMagnitude(channel, 0, numSamples));
 
-    if (numInputChannels == 1 && numOutputChannels > 1)
-    {
-        for (auto channel = 1; channel < numOutputChannels; ++channel)
-            buffer.copyFrom(channel, 0, buffer, 0, 0, numSamples);
-    }
-    else
-    {
-        for (auto channel = numInputChannels; channel < numOutputChannels; ++channel)
-            buffer.clear(channel, 0, numSamples);
-    }
+    for (auto channel = numInputChannels; channel < numOutputChannels; ++channel)
+        buffer.clear(channel, 0, numSamples);
 
     fuzzEngine.updateParameters(readParameters());
     // Hosts can occasionally supply blocks larger than their preparation hint.
@@ -74,9 +68,14 @@ void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
     for (int offset = 0; offset < numSamples; offset += preparedBlockSize)
     {
         const auto length = juce::jmin(preparedBlockSize, numSamples - offset);
-        juce::AudioBuffer<float> chunk(buffer.getArrayOfWritePointers(), numOutputChannels, offset, length);
+        juce::AudioBuffer<float> chunk(buffer.getArrayOfWritePointers(), numInputChannels, offset, length);
         fuzzEngine.processBlock(chunk);
     }
+
+    // A mono input needs one circuit path; expand the processed result afterward.
+    if (numInputChannels == 1 && numOutputChannels > 1)
+        for (auto channel = 1; channel < numOutputChannels; ++channel)
+            buffer.copyFrom(channel, 0, buffer, 0, 0, numSamples);
 
     float outputPeak = 0.0f;
     for (auto channel = 0; channel < numOutputChannels; ++channel)
@@ -85,12 +84,6 @@ void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
     updateMeter(inputMeterLevel, inputPeak);
     updateMeter(outputMeterLevel, outputPeak);
 
-    const auto reportedLatency = fuzzEngine.getLatencySamples();
-    if (reportedLatency != latencySamples)
-    {
-        latencySamples = reportedLatency;
-        setLatencySamples(latencySamples);
-    }
 }
 
 juce::AudioProcessorEditor* PyramidFuzzAudioProcessor::createEditor()
@@ -125,7 +118,7 @@ bool PyramidFuzzAudioProcessor::isMidiEffect() const
 
 double PyramidFuzzAudioProcessor::getTailLengthSeconds() const
 {
-    return 0.0;
+    return 10.0;
 }
 
 int PyramidFuzzAudioProcessor::getNumPrograms()
@@ -162,13 +155,28 @@ void PyramidFuzzAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 
 void PyramidFuzzAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
+    if (data == nullptr || sizeInBytes <= 0 || sizeInBytes > 1024 * 1024) return;
     const std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-
-    if (xmlState == nullptr)
-        return;
-
-    if (const auto state = juce::ValueTree::fromXml(*xmlState); state.isValid())
-        valueTreeState.replaceState(state);
+    if (xmlState == nullptr || !xmlState->hasTagName("PARAMETERS")) return;
+    const auto state = juce::ValueTree::fromXml(*xmlState);
+    if (!state.isValid()) return;
+    juce::StringArray seen;
+    for (const auto& child : state)
+    {
+        if (!child.hasType("PARAM") || !child.hasProperty("id") || !child.hasProperty("value")) return;
+        const auto id = child["id"].toString();
+        const auto* parameter = valueTreeState.getParameter(id);
+        if (parameter == nullptr || seen.contains(id)) return;
+        seen.add(id);
+        const auto text = child["value"].toString().trim();
+        const auto* start = text.toRawUTF8();
+        char* end = nullptr;
+        const double value = std::strtod(start, &end);
+        const auto range = parameter->getNormalisableRange();
+        if (end == start || *end != 0 || !std::isfinite(value) || value < range.start || value > range.end) return;
+    }
+    if (seen.size() != getParameters().size()) return;
+    valueTreeState.replaceState(state);
 }
 
 juce::AudioProcessorValueTreeState& PyramidFuzzAudioProcessor::getValueTreeState() noexcept

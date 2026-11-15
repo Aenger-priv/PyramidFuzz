@@ -4,7 +4,7 @@
 
 `PyramidFuzzAudioProcessor` owns the lifecycle, buses and
 `AudioProcessorValueTreeState`. It initializes DSP from saved parameters, splits
-oversized blocks into prepared chunks, and reports integer oversampling latency.
+oversized blocks into prepared chunks, and reports fixed six-sample oversampling latency.
 The editor owns the controls and parameter attachments. DSP lives separately in
 `src/dsp/`; offline measurements and independent references live in `tools/`.
 
@@ -45,7 +45,7 @@ is linear and does not clamp over-range output.
 | `ToneStack` | Five-node passive trapezoidal solve: C9/R5 bright arm, series R8/shunt C8 dark arm, R25 wiper and C3. Double states and cached Cholesky factorization. |
 | `OutputStage` | Nominal Q1 gain/headroom, C2 output coupling and R26 load. Defines the common 1/3 volts-to-digital output scale. Volume is applied after downsampling. |
 | `OversamplingEngine` | JUCE oversamplers, quality selection and integer-latency compensation. |
-| `FuzzEngine` | Prepared buffers, smoothing, stage order, per-channel processing and quality-change fade. |
+| `FuzzEngine` / `NonlinearPath` | Prepared buffers and three rate-specific paths, smoothing, per-channel processing and quality fade. |
 
 `HighControlFilter` remains a reusable unused contour block. The main path's
 High control operates R8 directly in `ToneStack`.
@@ -89,9 +89,18 @@ changes re-prepare state at a block boundary with a 6 ms fade down/up. Step 4
 adds tone/recovery/C2 to the state reset because they now run at the changed
 rate. This briefly interrupts the wet signal.
 
-Preparation during quality changes, latency updates, rapid quality reversals,
-CPU and quantitative aliasing limits still need Step 5 qualification. Passing
-Step 4's mode-change safety tests does not establish host-safe quality automation.
+All three quality paths are prepared before processing. A quality change resets
+and selects an existing path with the fade; it does not re-prepare stages or
+notify host latency. Two padding samples align 2x's native four-sample delay
+with the six-sample delay of 4x/8x. Mono-to-stereo runs one circuit path before
+output duplication. State loading validates the complete eight-parameter tree
+before replacing it; the processor advertises a conservative ten-second tail.
+
+The diode evaluator and warm solve preserve the declared law with fewer
+transcendental evaluations. Processor tests cover routing/state/chunking and
+measure zero C++ heap allocations during the exercised quality changes. See the
+[processing review](processing-quality-review.md) for scope, local CPU results,
+alias estimates and the explicitly unmet extreme-settings targets.
 
 ## Measurements and retained revisions
 
@@ -114,8 +123,8 @@ Large captures, archives, figures and listening WAVs are ignored under
 - [Step 3](input-sustain-review.md): input loading, fixed preamp and Sustain placement.
 - [Step 4](clipping-recovery-review.md): feedback clipping, coupling and recovery.
 
-The current gate is live guitar review of Step 4. Broader host, CPU and aliasing
-qualification follows separately in the [implementation plan](implementation-review-plan.md).
+The user has auditioned Step 4 and authorized the remaining work. UI and host
+validation continue in the [implementation plan](implementation-review-plan.md).
 
 ## App icon
 

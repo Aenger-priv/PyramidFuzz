@@ -1,13 +1,8 @@
 #pragma once
 
-#include "ClippingStage.h"
-#include "HighControlFilter.h"
-#include "InputVoicingStage.h"
-#include "OutputStage.h"
+#include "NonlinearPath.h"
 #include "OversamplingEngine.h"
-#include "PreGainStage.h"
-#include "SustainStage.h"
-#include "ToneStack.h"
+#include <array>
 
 namespace pyramidfuzz::dsp
 {
@@ -32,27 +27,20 @@ public:
     void processBlock(juce::AudioBuffer<float>& buffer);
 
     int getLatencySamples() const;
+    // Audio-thread diagnostic for transition tests; not a cross-thread UI value.
+    int getActiveOversamplingMode() const noexcept { return activeOversamplingMode; }
 
 private:
-    void updateNonlinearSampleRate();
-
     double sampleRate { 44100.0 };
     int maxBlockSize { 0 };
     int numChannels { 0 };
     int activeOversamplingMode { 1 };
-    int pendingOversamplingMode { 1 };
     bool fadingOutForOversamplingChange { false };
+    bool prepared = false;
 
     FuzzParameters currentParameters;
 
-    InputVoicingStage inputVoicingStage;
-    PreGainStage preGainStage;
-    SustainStage sustainStage;
-    ClippingStageA clippingStageA;
-    ClippingStageB clippingStageB;
-    ToneStack toneStack;
-    HighControlFilter highControlFilter;
-    OutputStage outputStage;
+    std::array<NonlinearPath, 3> paths;
     OversamplingEngine oversamplingEngine;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGainSmoothed;

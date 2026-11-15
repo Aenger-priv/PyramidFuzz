@@ -23,11 +23,30 @@ struct DiodeLaw
             const double slope = (saturationCurrent + k / r) / k;
             return {k / r + slope * (voltage - transition), slope};
         }
-        const double e = std::exp(voltage / k);
-        return {saturationCurrent * std::expm1(voltage / k), saturationCurrent * e / k};
+        const double eMinusOne = std::expm1(voltage / k);
+        return {saturationCurrent * eMinusOne, saturationCurrent * (1.0 + eMinusOne) / k};
     }
     Value pair(double voltage, int positiveCount = 1, int negativeCount = 1) const
     {
+        if (positiveCount == negativeCount)
+        {
+            // Exact antiparallel algebra: one exponential, rather than four
+            // separate exp/expm1 calls. expm1 preserves precision near zero.
+            const double k = positiveCount * ideality * inputcircuit::thermalVoltage;
+            const double r = positiveCount * seriesResistance;
+            const double transition = k * std::log1p(k / (r * saturationCurrent));
+            const double magnitude = std::abs(voltage);
+            if (magnitude <= transition)
+            {
+                const double u = std::expm1(magnitude / k), e = 1.0 + u;
+                return {std::copysign(saturationCurrent * u * (2.0 + u) / e, voltage),
+                        saturationCurrent * (e + 1.0 / e) / k};
+            }
+            const auto f = forward(magnitude, positiveCount);
+            const double reverse = std::exp(-magnitude / k);
+            return {std::copysign(f.current + saturationCurrent * (1.0 - reverse), voltage),
+                    f.slope + saturationCurrent * reverse / k};
+        }
         const auto a = forward(voltage, positiveCount), b = forward(-voltage, negativeCount);
         return {a.current - b.current, a.slope + b.slope};
     }
@@ -97,21 +116,31 @@ public:
                 * (openGain * resistance + inputcircuit::collectorResistance)) * dFeedback - dDifference;
             return {{y, b, v, current, b + y - difference, 0}, derivative, difference};
         };
-        // Bracket plus safeguarded Newton: bounded work even after a large input
-        // or mode jump. Exp is bounded by DiodeLaw's monotone continuation.
-        double lo = -1, hi = 1;
-        for (int i = 0; i < 8 && evaluate(lo).result.residual < 0; ++i) lo *= 2;
-        for (int i = 0; i < 8 && evaluate(hi).result.residual > 0; ++i) hi *= 2;
-        double v = std::clamp(state.diodeVoltage, lo, hi);
+        // A short, step-limited warm solve avoids constructing a bracket for
+        // ordinary adjacent audio samples. Hard changes fall back to verified
+        // bracketing; the total Newton/bisection budget remains bounded at 48.
+        double v = state.diodeVoltage;
         auto value = evaluate(v);
         int iterations = 0;
-        for (; iterations < 48; ++iterations)
+        for (; iterations < 3 && std::abs(value.result.residual) >= 1e-10; ++iterations)
         {
-            if (std::abs(value.result.residual) < 1e-10) break;
-            if (value.result.residual > 0) lo = v; else hi = v;
-            double next = v - value.result.residual / value.derivative;
-            if (iterations >= 12 || next <= lo || next >= hi) next = 0.5 * (lo + hi);
-            v = next; value = evaluate(v);
+            v += std::clamp(-value.result.residual / value.derivative, -0.1, 0.1);
+            value = evaluate(v);
+        }
+        if (std::abs(value.result.residual) >= 1e-10)
+        {
+            double lo = -1, hi = 1;
+            for (int i = 0; i < 8 && evaluate(lo).result.residual < 0; ++i) lo *= 2;
+            for (int i = 0; i < 8 && evaluate(hi).result.residual > 0; ++i) hi *= 2;
+            v = std::clamp(v, lo, hi); value = evaluate(v);
+            for (; iterations < 48; ++iterations)
+            {
+                if (std::abs(value.result.residual) < 1e-10) break;
+                if (value.result.residual > 0) lo = v; else hi = v;
+                double next = v - value.result.residual / value.derivative;
+                if (iterations >= 12 || next <= lo || next >= hi) next = 0.5 * (lo + hi);
+                v = next; value = evaluate(v);
+            }
         }
         state.feedbackCurrent = gFeedbackCap * value.difference + hc;
         state.feedbackVoltage = value.difference;

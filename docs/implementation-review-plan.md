@@ -1,9 +1,10 @@
 # Implementation review and proposed revision plan
 
 Date: 2026-11-15. Reviewed baseline: `b98a3be` on `main`.
-Status: Steps 1–3 were approved and implemented. Step 2 has positive live-guitar
-feedback with humbuckers. Step 3 passes its circuit checks and awaits
-[listening review](input-sustain-review.md). Steps 4–7 await separate approval.
+Status: Steps 1–4 are implemented. Step 4 has live-guitar feedback: germanium
+sounds smoother/darker and mode differences are audible. The user authorized
+continuation through Steps 5–7. Step 5's processing checks pass, with documented
+CPU/alias stress exceptions; UI and final host validation are next.
 
 ## Direction
 
@@ -23,7 +24,7 @@ Keep C8 at 22 nF, following the clarification already recorded in
 say 2.2 uF, while its component label says 0.022 uF. Record this as an explicit
 chosen variant; do not silently change the value during tuning.
 
-## Evidence from this review
+## Evidence from the original baseline review
 
 - Rebuilt Debug DSP tests, AU, and standalone successfully. After rebuilding,
   CTest passed 1/1. There are upstream JUCE/macOS SDK deprecation warnings.
@@ -40,7 +41,7 @@ chosen variant; do not silently change the value during tuning.
 - Live standalone UI inspection timed out. UI findings below are based on source;
   runtime visual and interaction checks remain an acceptance gate.
 
-## Findings
+## Findings from the original baseline review
 
 ### 1. Tone network topology needs correction — highest priority
 
@@ -117,7 +118,8 @@ before deciding whether to relocate or remove that saturation.
 
 Each numbered step is a separate reviewable change. Build AU/standalone and run
 relevant checks after each major change. Update README and architecture as their
-claims change. Stop at the review gate before starting the next numbered step.
+claims change. Record each review gate. The latest user authorization permits
+continuation through Steps 5–7; report unmet gates explicitly.
 
 ### Step 1 — Freeze the baseline and establish reference checks
 
@@ -215,9 +217,9 @@ and approval of the resulting sound and interface.
 
 ## Current review gate
 
-Step 4 was approved after the clipping-path review. Its reduced feedback model,
-recovery/coupling correction and mode checks are implemented; see the
-[clipping/recovery review](clipping-recovery-review.md). Audition Off/Si/Ge with
-real guitar against the retained Step 3 build, including a second pass with
-Volume adjusted for comparable loudness. No real DI or physical-pedal reference
-has been captured. Step 5 requires separate approval after this listening review.
+The user tested Step 4 with guitar and heard smoother/darker germanium and
+clear mode differences. Steps 5–7 are now authorized together. The
+[processing/quality review](processing-quality-review.md) records passing
+processor/circuit checks and CPU improvements, plus unmet extreme CPU/alias
+targets. Continue UI/UX and final validation while retaining these limitations.
+No real DI or physical-pedal reference has been captured.

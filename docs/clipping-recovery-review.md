@@ -159,3 +159,10 @@ standalone instance before reopening it. The next gate is live guitar review:
 compare Off/Si/Ge at the same settings, compensate using Volume for a second
 listening pass, and check attack, cleanup, low notes and decay. Step 5's broader
 CPU, aliasing, quality-switch and host qualification remains separate.
+
+## Subsequent guitar feedback
+
+The user tested this revision with guitar, heard the mode differences and
+described germanium as smoother and darker. They then authorized Steps 5–7.
+This is useful live-listening feedback; no recorded DI or hardware comparison
+was added by that test.
