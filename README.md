@@ -12,7 +12,7 @@ Pyramid Fuzz is a JUCE guitar fuzz for macOS, inspired by a modified Ram's Head 
 - **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off opens its diode branch while retaining the amplifier; silicon uses opposing single diodes, and germanium uses lower-threshold asymmetric one/two-junction branches. Their natural output levels differ.
 - **Oversampling** selects 2x, 4x, or 8x processing of the nonlinear stages. The default is 4x. Changing it briefly fades the signal while prepared processing state is reset; reported latency stays at six samples.
 
-The editor also displays input and output levels. The plugin supports mono and stereo input/output, including mono input to stereo output.
+Double-click a knob to reset it; Shift-drag for fine control. Tab and arrow keys adjust focused controls, and values accept numeric entry. Tone/High display percentages. The input/output meters show peak dBFS with a one-second overload hold. Clipping Off keeps the fuzz active; use the host bypass for the complete effect. The plugin supports mono and stereo input/output, including mono input to stereo output.
 
 ## Build and run on macOS
 
@@ -59,6 +59,8 @@ The [Step 3 input/Sustain revision](docs/input-sustain-review.md) derives input 
 The [Step 4 clipping/recovery revision](docs/clipping-recovery-review.md) uses nonlinear diode-feedback branches with capacitor memory, a component-derived recovery stage and explicit voltage scaling. Germanium follows the schematic's one/two-diode asymmetry; all nonlinear stages now run inside oversampling. Device curves and remaining source/load approximations are documented. Revised and previous builds and listening files are retained locally.
 
 The [Step 5 processing review](docs/processing-quality-review.md) documents prepared quality paths, fixed six-sample latency, processor state/routing tests and CPU/alias measurements. Use 4x for playing; try 8x for bright high-drive sounds when CPU allows. At 96 kHz, 8x stereo with a 32-frame buffer remains CPU-heavy.
+
+The [UI review](docs/ui-playability-review.md) describes formatting, control help, keyboard focus and meter behavior, with 1x/2x previews and the current interaction-test status.
 
 ## Project layout
 

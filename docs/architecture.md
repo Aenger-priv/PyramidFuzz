@@ -85,9 +85,9 @@ reference equations and the switch-drawing ambiguity.
 
 The host-rate smoother values are held for each group of oversampled samples.
 There is no allocation in the ordinary fixed-quality sample loop. Quality
-changes re-prepare state at a block boundary with a 6 ms fade down/up. Step 4
-adds tone/recovery/C2 to the state reset because they now run at the changed
-rate. This briefly interrupts the wet signal.
+changes use a block-boundary state reset with a 6 ms fade down/up. The reset
+includes tone/recovery/C2 because they run at the selected rate. This briefly
+interrupts the wet signal.
 
 All three quality paths are prepared before processing. A quality change resets
 and selects an existing path with the fade; it does not re-prepare stages or
@@ -125,6 +125,19 @@ Large captures, archives, figures and listening WAVs are ignored under
 
 The user has auditioned Step 4 and authorized the remaining work. UI and host
 validation continue in the [implementation plan](implementation-review-plan.md).
+
+## Control presentation and meters
+
+Parameter text formatting uses dB, a 0–10 Sustain amount and Tone/High
+percentages, while stored values remain unchanged. Slider attachments retain
+default reset; controls add explicit focus order, fine Shift-drag, help and
+mode-specific footer text. Host bypass is retained as the complete-effect bypass.
+
+`PeakMeter` holds sample-timed 400 ms exponential release and a one-second
+overload indicator, publishing lock-free atomic level/flag snapshots to the
+editor. Meters display −60..0 dBFS bars and unbounded numeric peaks. Input is
+before trim and output after Volume. They do not affect audio. See the
+[UI review](ui-playability-review.md) for previews and interaction status.
 
 ## App icon
 

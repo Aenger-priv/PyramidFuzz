@@ -42,11 +42,51 @@ void signal(juce::AudioBuffer<float>& b,int offset,double rate)
             b.setSample(ch,i,float(.2*std::sin(2*juce::MathConstants<double>::pi*110*(offset+i)/rate)));
 }
 }
-int main()
+int main(int argc,char** argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
     juce::ScopedNoDenormals noDenormals;
     juce::MidiBuffer midi;
+    if(argc==2)
+    {
+        const auto folder=juce::File::getCurrentWorkingDirectory().getChildFile(argv[1]);
+        if(folder.exists() || !folder.createDirectory()) return 2;
+        for(bool hot:{false,true})
+        {
+            PyramidFuzzAudioProcessor preview;
+            if(hot){set(preview,"input",18);set(preview,"sustain",10);set(preview,"tone",1);set(preview,"high",1);set(preview,"volume",12);set(preview,"clippingMode",0);}
+            preview.prepareToPlay(48000,128);juce::AudioBuffer<float> buffer(2,128);
+            for(int i=0;i<32;++i){signal(buffer,i*128,48000);preview.processBlock(buffer,midi);}
+            std::unique_ptr<juce::AudioProcessorEditor> editor(preview.createEditor());
+            for(float scale:{1.0f,2.0f})
+            {
+                auto image=editor->createComponentSnapshot(editor->getLocalBounds(),true,scale);
+                auto file=folder.getChildFile(juce::String(hot?"editor-overload-":"editor-default-")+juce::String(int(scale))+"x.png");
+                auto stream=file.createOutputStream();juce::PNGImageFormat png;
+                if(!stream || !png.writeImageToStream(image,*stream)) return 3;
+            }
+        }
+        return 0;
+    }
+    // Meter timing is sample-based, so callback size cannot change the release
+    // rate or overload hold. Levels above full scale remain visible to the UI.
+    for(double rate:{44100.0,48000.0,96000.0})for(int size:{32,128,512})
+    {
+        pyramidfuzz::dsp::PeakMeter meter;meter.prepare(rate);meter.push(1.4f,1);
+        check(meter.level()>1.39f && meter.overload(),"meter must expose overload without clamping the audio level");
+        int frames=int(rate*.4);
+        for(int offset=0;offset<frames;offset+=size)meter.push(0,std::min(size,frames-offset));
+        check(std::abs(meter.level()-1.4f*std::exp(-1.0f))<1e-4f,"meter release depends on block size");
+        check(meter.overload(),"clip hold expired too soon");
+        meter.push(0,int(rate)-frames-1);check(meter.overload(),"clip hold must last one second");
+        meter.push(0,1);check(!meter.overload(),"clip hold did not expire");
+    }
+    PyramidFuzzAudioProcessor formatted;
+    auto* toneParameter=formatted.getValueTreeState().getParameter("tone");
+    check(toneParameter->getText(.5f,0)=="50.0" && toneParameter->getLabel()=="%","Tone must expose readable percent formatting");
+    check(std::abs(toneParameter->convertFrom0to1(toneParameter->getValueForText("44.5%"))-.445f)<1e-6,"percent text must preserve the parameter's stored range");
+    auto* inputParameter=formatted.getValueTreeState().getParameter("input");
+    check(inputParameter->getText(inputParameter->convertTo0to1(8),0)=="+8.0" && inputParameter->getLabel()=="dB","trim must expose signed dB formatting");
     PyramidFuzzAudioProcessor state;
     set(state,"input",7.1f);set(state,"sustain",8.3f);set(state,"tone",.78f);set(state,"high",.91f);
     set(state,"volume",-17);set(state,"voicing",0);set(state,"clippingMode",2);set(state,"oversampling",2);

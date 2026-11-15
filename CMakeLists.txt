@@ -47,6 +47,7 @@ target_sources(PyramidFuzz
         src/dsp/DspUtilities.h
         src/dsp/FuzzEngine.cpp
         src/dsp/FuzzEngine.h
+        src/dsp/PeakMeter.h
         src/dsp/NonlinearPath.h
         src/dsp/InputVoicingStage.h
         src/dsp/InputCircuit.h
@@ -84,6 +85,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
     src/dsp/DspUtilities.h
     src/dsp/FuzzEngine.cpp
     src/dsp/FuzzEngine.h
+    src/dsp/PeakMeter.h
     src/dsp/NonlinearPath.h
     src/dsp/InputVoicingStage.h
     src/dsp/InputCircuit.h

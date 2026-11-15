@@ -18,11 +18,13 @@ void PyramidFuzzAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     fuzzEngine.prepare(sampleRate, preparedBlockSize, channels);
     latencySamples = fuzzEngine.getLatencySamples();
     setLatencySamples(latencySamples);
+    inputMeter.prepare(sampleRate); outputMeter.prepare(sampleRate);
 }
 
 void PyramidFuzzAudioProcessor::releaseResources()
 {
     fuzzEngine.reset();
+    inputMeter.reset(); outputMeter.reset();
 }
 
 bool PyramidFuzzAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -81,8 +83,8 @@ void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
     for (auto channel = 0; channel < numOutputChannels; ++channel)
         outputPeak = juce::jmax(outputPeak, buffer.getMagnitude(channel, 0, numSamples));
 
-    updateMeter(inputMeterLevel, inputPeak);
-    updateMeter(outputMeterLevel, outputPeak);
+    inputMeter.push(inputPeak,numSamples);
+    outputMeter.push(outputPeak,numSamples);
 
 }
 
@@ -186,12 +188,12 @@ juce::AudioProcessorValueTreeState& PyramidFuzzAudioProcessor::getValueTreeState
 
 float PyramidFuzzAudioProcessor::getInputMeterLevel() const noexcept
 {
-    return inputMeterLevel.load(std::memory_order_relaxed);
+    return inputMeter.level();
 }
 
 float PyramidFuzzAudioProcessor::getOutputMeterLevel() const noexcept
 {
-    return outputMeterLevel.load(std::memory_order_relaxed);
+    return outputMeter.level();
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout PyramidFuzzAudioProcessor::createParameterLayout()
@@ -199,29 +201,37 @@ juce::AudioProcessorValueTreeState::ParameterLayout PyramidFuzzAudioProcessor::c
     using ChoiceParameter = juce::AudioParameterChoice;
     using FloatParameter = juce::AudioParameterFloat;
 
+    const auto decibels = juce::AudioParameterFloatAttributes().withLabel("dB")
+        .withStringFromValueFunction([](float x,int) { return (x>0?"+":"") + juce::String(x,1); })
+        .withValueFromStringFunction([](const juce::String& text) { return text.getFloatValue(); });
+    const auto percent = juce::AudioParameterFloatAttributes().withLabel("%")
+        .withStringFromValueFunction([](float x,int) { return juce::String(x*100.0f,1); })
+        .withValueFromStringFunction([](const juce::String& text) { return text.getFloatValue()/100.0f; });
+    const auto amount = juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float x,int) { return juce::String(x,1); });
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> parameters;
     parameters.push_back(std::make_unique<FloatParameter>(pyramidfuzz::ParameterIds::input,
                                                           "Input",
                                                           juce::NormalisableRange<float>(-12.0f, 18.0f, 0.01f),
                                                           0.0f,
-                                                          juce::AudioParameterFloatAttributes().withLabel(" dB")));
+                                                          decibels));
     parameters.push_back(std::make_unique<FloatParameter>(pyramidfuzz::ParameterIds::sustain,
                                                           "Sustain",
                                                           juce::NormalisableRange<float>(0.0f, 10.0f, 0.01f),
-                                                          6.8f));
+                                                          6.8f, amount));
     parameters.push_back(std::make_unique<FloatParameter>(pyramidfuzz::ParameterIds::tone,
                                                           "Tone",
                                                           juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
-                                                          0.34f));
+                                                          0.34f, percent));
     parameters.push_back(std::make_unique<FloatParameter>(pyramidfuzz::ParameterIds::high,
                                                           "High",
                                                           juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
-                                                          0.22f));
+                                                          0.22f, percent));
     parameters.push_back(std::make_unique<FloatParameter>(pyramidfuzz::ParameterIds::volume,
                                                           "Volume",
                                                           juce::NormalisableRange<float>(-30.0f, 12.0f, 0.01f),
                                                           -11.0f,
-                                                          juce::AudioParameterFloatAttributes().withLabel(" dB")));
+                                                          decibels));
     parameters.push_back(std::make_unique<ChoiceParameter>(pyramidfuzz::ParameterIds::voicing,
                                                            "Voicing",
                                                            juce::StringArray { "Hi", "Lo" },
@@ -255,11 +265,4 @@ pyramidfuzz::dsp::FuzzParameters PyramidFuzzAudioProcessor::readParameters() con
     parameters.clippingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::clippingMode));
     parameters.oversamplingMode = static_cast<int>(*valueTreeState.getRawParameterValue(pyramidfuzz::ParameterIds::oversampling));
     return parameters;
-}
-
-void PyramidFuzzAudioProcessor::updateMeter(std::atomic<float>& meter, float newPeak) noexcept
-{
-    const auto previous = meter.load(std::memory_order_relaxed);
-    const auto next = newPeak > previous ? newPeak : previous * 0.9f;
-    meter.store(juce::jlimit(0.0f, 1.2f, next), std::memory_order_relaxed);
 }
