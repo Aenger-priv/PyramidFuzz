@@ -35,12 +35,15 @@ stages oversampled, but its fixed filter curves and transfer functions are not
 yet derived from this schematic. `ToneStack` now uses nodal analysis rather
 than generic EQ. Step 2 corrects the R8-series/C8-shunt branch and dark-to-bright
 Tone mapping, validated against the independent passive AC netlist with explicit
-source/load assumptions. `InputVoicingStage` still uses fixed filters and a gain
-morph rather than derived 39 kOhm / 390 kOhm input loading. Sustain also changes
-gain inside all three nonlinear stages instead of acting as R24 after Q4.
-Therefore this remains a schematic-inspired fuzz. See [the baseline review](baseline-review.md)
+source/load assumptions. Step 3 derives C1 and Hi/Lo loading with Q4's nominal
+feedback response and moves Sustain to the loaded R24/R23/C4/C5 network after
+the fixed preamp. The two clipping stages now have fixed internal drive.
+Their transfer functions and remaining filters still require the Step 4
+calibration, so this remains a schematic-inspired fuzz. See [the baseline review](baseline-review.md)
 for independent reference wiring, explicit assumptions, and measured evidence.
 The [tone correction review](tone-correction-review.md) records the subsequent change.
+The [input/Sustain review](input-sustain-review.md) documents Step 3's device
+assumptions, independent DC/AC reference, and limits of the reduced model.
 
 ## Implementation sequence
 

@@ -6,6 +6,7 @@
 #include "OutputStage.h"
 #include "OversamplingEngine.h"
 #include "PreGainStage.h"
+#include "SustainStage.h"
 #include "ToneStack.h"
 
 namespace pyramidfuzz::dsp
@@ -46,6 +47,7 @@ private:
 
     InputVoicingStage inputVoicingStage;
     PreGainStage preGainStage;
+    SustainStage sustainStage;
     ClippingStageA clippingStageA;
     ClippingStageB clippingStageB;
     ToneStack toneStack;
@@ -63,6 +65,8 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> oversamplingTransitionSmoothed;
 
     std::vector<float> sustainValues;
+    std::vector<float> inputGainValues;
+    std::vector<float> voicingValues;
     std::vector<float> toneValues;
     std::vector<float> highValues;
     std::vector<float> volumeValues;

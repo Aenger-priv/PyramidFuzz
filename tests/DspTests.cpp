@@ -36,6 +36,23 @@ int main()
         if (! condition) { std::cerr << message << '\n'; ++failures; }
     };
 
+    // The fixed preamp must remain monotonic for hot inputs; its old quadratic
+    // skew could fold a sufficiently negative input toward the positive rail.
+    for (double rate : {88200.0, 192000.0, 768000.0})
+    {
+        float previous = -10;
+        for (float input : {-10.0f, -1.0f, -.1f, 0.0f, .1f, 1.0f, 10.0f})
+        {
+            PreGainStage pre;
+            pre.prepare(rate, 128, 1);
+            float output = 0;
+            for (int i = 0; i < int(.01 * rate); ++i) output = pre.processSample(0, input);
+            check(std::isfinite(output) && std::abs(output) < 9, "preamp must respect finite supply headroom");
+            check(output > previous, "fixed preamp must be monotonic without foldback");
+            previous = output;
+        }
+    }
+
     // Behavioral regressions complement the independent full AC grid check.
     // They test direction and useful signal flow, not copied circuit constants.
     for (double rate : {44100.0, 48000.0, 96000.0})

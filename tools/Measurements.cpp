@@ -1,6 +1,7 @@
 #include <JuceHeader.h>
 #include "dsp/FuzzEngine.h"
 #include <fstream>
+#include <complex>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -35,13 +36,14 @@ class TappedPath
 public:
     TappedPath(double rate, int channels, const FuzzParameters& p) : parameters(p)
     {
-        input.prepare(rate, blockSize, channels);
         tone.prepare(rate, blockSize, channels);
         output.prepare(rate, blockSize, channels);
         oversampling.prepare(channels, blockSize);
         oversampling.setMode(p.oversamplingMode);
         const auto factor = oversampling.getFactor();
+        input.prepare(rate * factor, blockSize * factor, channels);
         pre.prepare(rate * factor, blockSize * factor, channels);
+        sustain.prepare(rate * factor, blockSize * factor, channels);
         a.prepare(rate * factor, blockSize * factor, channels);
         b.prepare(rate * factor, blockSize * factor, channels);
     }
@@ -52,16 +54,17 @@ public:
         { if (collect) statistics[name].add(x); return x; };
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
             for (int i = 0; i < buffer.getNumSamples(); ++i)
-                buffer.setSample(ch, i, tap("input_voicing", input.processSample(ch,
-                    tap("dry", buffer.getSample(ch, i)), dbToGain(parameters.inputDecibels), float(parameters.voicingMode))));
+                tap("dry", buffer.getSample(ch, i));
         oversampling.processBlock(buffer, [&](auto& up, int)
         {
             for (size_t ch = 0; ch < up.getNumChannels(); ++ch)
                 for (size_t i = 0; i < up.getNumSamples(); ++i)
                 {
-                    auto x = tap("pre_gain", pre.processSample(int(ch), up.getSample(int(ch), int(i)), parameters.sustain));
-                    x = tap("clip_a", a.processSample(int(ch), x, parameters.sustain));
-                    x = tap("clip_b", b.processSample(int(ch), x, parameters.sustain, float(parameters.clippingMode)));
+                    auto x = tap("input_voicing", input.processSample(int(ch), up.getSample(int(ch), int(i)), dbToGain(parameters.inputDecibels), float(parameters.voicingMode)));
+                    x = tap("pre_gain", pre.processSample(int(ch), x));
+                    x = tap("sustain", sustain.processSample(int(ch), x, parameters.sustain, float(parameters.voicingMode)));
+                    x = tap("clip_a", a.processSample(int(ch), x));
+                    x = tap("clip_b", b.processSample(int(ch), x, float(parameters.clippingMode)));
                     up.setSample(int(ch), int(i), clampAudio(x));
                 }
         });
@@ -77,6 +80,7 @@ private:
     FuzzParameters parameters;
     InputVoicingStage input;
     PreGainStage pre;
+    SustainStage sustain;
     ClippingStageA a;
     ClippingStageB b;
     ToneStack tone;
@@ -231,6 +235,97 @@ void measureToneDynamics(const juce::File& folder)
     }
 }
 
+template <typename Process>
+std::complex<double> sineResponse(double rate, double frequency, Process process)
+{
+    constexpr double amplitude = 1e-4;
+    const int settle = juce::roundToInt(.5 * rate), window = juce::roundToInt(.2 * rate);
+    double re = 0, im = 0;
+    for (int i = 0; i < settle + window; ++i)
+    {
+        const double angle = 2 * juce::MathConstants<double>::pi * frequency * i / rate;
+        const double output = process(float(amplitude * std::sin(angle)));
+        if (!std::isfinite(output)) throw std::runtime_error("Non-finite input-network response");
+        if (i >= settle) { re += output * std::sin(angle); im += output * std::cos(angle); }
+    }
+    return {2 * re / window / amplitude, 2 * im / window / amplitude};
+}
+
+void measureInputCircuit(const juce::File& folder)
+{
+    auto stream = csv(folder, "input-response.csv");
+    stream << "block,sample_rate,oversampling,voicing,sustain,frequency_hz,magnitude_db,phase_rad\n";
+    for (double hostRate : {44100.0, 48000.0, 96000.0})
+        for (int factor : {2, 4, 8})
+        {
+            const auto frequencies = factor == 4 ? std::vector<double>{20,50,100,440,1000,3000,5000,10000}
+                                                 : std::vector<double>{20,1000,10000};
+            const auto settings = factor == 4 ? std::vector<float>{0,.25f,.68f,1} : std::vector<float>{0,1};
+            const double rate = hostRate * factor;
+            for (int voice = 0; voice < 2; ++voice)
+                for (double f : frequencies)
+                {
+                    InputVoicingStage input;
+                    PreGainStage pre;
+                    input.prepare(rate, blockSize * factor, 1); pre.prepare(rate, blockSize * factor, 1);
+                    auto value = sineResponse(rate, f, [&](float x) { return pre.processSample(0, input.processSample(0, x, 1, float(voice))); });
+                    stream << "preamp," << hostRate << ',' << factor << ',' << voice << ",0," << f << ','
+                           << 20 * std::log10(std::abs(value)) << ',' << std::arg(value) << '\n';
+                    for (float s : settings)
+                    {
+                        SustainStage sustain;
+                        sustain.prepare(rate, blockSize * factor, 1);
+                        value = sineResponse(rate, f, [&](float x) { return sustain.processSample(0, x, s, float(voice)); });
+                        stream << "sustain," << hostRate << ',' << factor << ',' << voice << ',' << s << ',' << f << ','
+                               << 20 * std::log10(std::abs(value)) << ',' << std::arg(value) << '\n';
+                    }
+                }
+        }
+}
+
+void measureInputDynamics(const juce::File& folder)
+{
+    auto stream = csv(folder, "input-dynamics.csv");
+    stream << "sample_rate,oversampling,peak,max_sample_step,stereo_error,tail_peak\n";
+    for (double rate : {44100.0, 48000.0, 96000.0})
+        for (int mode = 0; mode < 3; ++mode)
+        {
+            if (rate != 48000 && mode != 1) continue;
+            FuzzParameters p = defaults(); p.oversamplingMode = mode;
+            FuzzEngine engine; engine.updateParameters(p); engine.prepare(rate, blockSize, 2);
+            juce::AudioBuffer<float> buffer(2, blockSize);
+            double peak = 0, maxStep = 0, channelError = 0, tail = 0;
+            float previous = 0;
+            for (int offset = 0; offset < int(3 * rate); offset += blockSize)
+            {
+                const int part = std::min(5, int(offset / rate / .3));
+                const float settings[] = {0,1,.25f,.68f,0,1};
+                p.sustain = settings[part]; p.voicingMode = part % 2;
+                p.inputDecibels = part == 2 || part == 5 ? 18.0f : (part == 4 ? -12.0f : 0.0f);
+                engine.updateParameters(p);
+                for (int i = 0; i < blockSize; ++i)
+                {
+                    const double time = (offset + i) / rate;
+                    const double envelope = std::clamp((1.8 - time) / .02, 0.0, 1.0);
+                    const float x = float(.4 * envelope * std::sin(2 * juce::MathConstants<double>::pi * 110 * time));
+                    buffer.setSample(0, i, x); buffer.setSample(1, i, x);
+                }
+                engine.processBlock(buffer);
+                for (int i = 0; i < blockSize; ++i)
+                {
+                    const float x = buffer.getSample(0, i), right = buffer.getSample(1, i);
+                    if (!std::isfinite(x) || !std::isfinite(right)) throw std::runtime_error("Non-finite hot-input/switching output");
+                    peak = std::max(peak, double(std::abs(x)));
+                    maxStep = std::max(maxStep, double(std::abs(x - previous)));
+                    channelError = std::max(channelError, double(std::abs(x - right)));
+                    if ((offset + i) / rate > 2.9) tail = std::max(tail, double(std::abs(x)));
+                    previous = x;
+                }
+            }
+            stream << rate << ',' << (1 << (mode + 1)) << ',' << peak << ',' << maxStep << ',' << channelError << ',' << tail << '\n';
+        }
+}
+
 void measureGain(const juce::File& folder)
 {
     auto stages = csv(folder, "stages.csv");
@@ -354,15 +449,19 @@ int main(int argc, char** argv)
         juce::String output;
         juce::StringArray di;
         bool toneOnly = false;
+        bool inputOnly = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string arg(argv[i]);
             if (arg == "--output" && i + 1 < argc) output = argv[++i];
             else if (arg == "--di" && i + 1 < argc) di.add(argv[++i]);
             else if (arg == "--tone-only") toneOnly = true;
-            else throw std::runtime_error("Usage: PyramidFuzzMeasurements --output NEW_FOLDER [--tone-only | --di WAV_OR_AIFF]...");
+            else if (arg == "--input-only") inputOnly = true;
+            else throw std::runtime_error("Usage: PyramidFuzzMeasurements --output NEW_FOLDER [--tone-only | --input-only | --di WAV_OR_AIFF]...");
         }
         if (output.isEmpty()) throw std::runtime_error("--output is required");
+        if ((toneOnly && inputOnly) || ((toneOnly || inputOnly) && !di.isEmpty()))
+            throw std::runtime_error("Choose full capture, tone-only, or input-only; DI is supported by full captures");
         const auto folder = juce::File::getCurrentWorkingDirectory().getChildFile(output);
         if (folder.exists()) throw std::runtime_error("Output folder already exists; refusing to overwrite measurements");
         if (!folder.createDirectory()) throw std::runtime_error("Cannot create output folder");
@@ -378,12 +477,21 @@ int main(int argc, char** argv)
                  << ",\n  \"gain_settle_samples\": " << spectrumSize
                  << ",\n  \"synthetic_dry_peak_dbfs\": -18,\n  \"synthetic_seconds\": 5,\n  \"synthetic_signal_ends_seconds\": 4,"
                  << "\n  \"synthetic_end_fade_seconds\": 0.02,\n  \"decay_window_seconds\": 0.05,"
-                 << "\n  \"di_resampling\": false,\n  \"di_normalization\": false,\n  \"di_appended_silence_seconds\": 1\n}\n";
+                 << "\n  \"di_resampling\": false,\n  \"di_normalization\": false,\n  \"di_appended_silence_seconds\": 1,"
+                 << "\n  \"stage_names\": [\"dry\",\"input_voicing\",\"pre_gain\",\"sustain\",\"clip_a\",\"clip_b\",\"downsampled\",\"tone\",\"output\"],"
+                 << "\n  \"input_domain\": \"oversampled\",\n  \"input_model\": \"nominal Q4 feedback and loaded R24/C4/C5 network\"\n}\n";
         protocol.close();
-        std::cout << "Measuring tone impulse grid..." << std::endl;
-        measureTone(folder);
-        measureToneDynamics(folder);
+        if (!inputOnly)
+        {
+            std::cout << "Measuring tone impulse grid..." << std::endl;
+            measureTone(folder); measureToneDynamics(folder);
+        }
         if (!toneOnly)
+        {
+            std::cout << "Measuring input and Sustain circuits..." << std::endl;
+            measureInputCircuit(folder); measureInputDynamics(folder);
+        }
+        if (!toneOnly && !inputOnly)
         {
             std::cout << "Measuring gain, harmonics, and stage taps..." << std::endl;
             measureGain(folder);

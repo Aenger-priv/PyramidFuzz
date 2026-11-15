@@ -5,10 +5,10 @@ Pyramid Fuzz is a JUCE guitar fuzz for macOS, inspired by a modified Ram's Head 
 ## Controls
 
 - **Input** adjusts the signal level entering the fuzz.
-- **Sustain** adjusts the gain and compression of the fuzz stages.
+- **Sustain** adjusts the loaded interstage divider after the fixed preamp, changing drive and coupling response into the fuzz stages.
 - **Tone** sweeps the passive tone network from darker to brighter; **High** reduces the low-pass branch's series resistance to extend its upper response. These passive controls interact.
 - **Volume** sets the output level.
-- **Voicing** selects the tighter Hi input or the fuller, lower-drive Lo input.
+- **Voicing** selects the 39 kOhm Hi input or the substantially lower-drive 390 kOhm Lo input. Try Hi for dense fuzz and Lo for cleaner response; their levels intentionally differ.
 - **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off retains the gain stage with a more open response.
 - **Oversampling** selects 2x, 4x, or 8x processing of the nonlinear stages. The default is 4x. Changing it briefly fades the signal while the processing is reset.
 
@@ -53,6 +53,8 @@ The checks cover clipping-knee continuity, finite output, stereo consistency, an
 When Python 3 is available, CTest also runs independent passive-circuit reference checks. The optional `PyramidFuzzMeasurements` target captures tone responses, stage levels, harmonics, and unnormalized synthetic/DI audio without changing the plugin DSP. See [the baseline review](docs/baseline-review.md) for commands, preserved-build details, results, and proposed acceptance limits. Generated bundles live under the ignored `artifacts/` directory.
 
 The tone-network correction and dark-to-bright mapping intentionally change the sound of existing settings. The corrected network passes the independent circuit-response checks; see [the Step 2 review](docs/tone-correction-review.md) for measurements and listening comparisons. The original build remains archived separately.
+
+The [Step 3 input/Sustain revision](docs/input-sustain-review.md) derives input loading, fixed preamp response/headroom, and the loaded Sustain network from schematic values and explicit nominal transistor assumptions. It passes independent circuit checks, including hot-input/control sweeps. Existing settings intentionally sound different; the positively reviewed Step 2 build is also preserved for comparison.
 
 ## Project layout
 

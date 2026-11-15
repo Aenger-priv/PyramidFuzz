@@ -17,6 +17,8 @@ import struct
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--baseline", type=Path, required=True)
 parser.add_argument("--revised", type=Path, required=True)
+parser.add_argument("--audio-only", action="store_true", help="Export listening pairs without tone-specific plots")
+parser.add_argument("--include-hi", action="store_true", help="Also compare Hi voicing")
 args = parser.parse_args()
 old, new = args.baseline.resolve(), args.revised.resolve()
 output = new / "comparison"
@@ -77,37 +79,43 @@ if sha(old / "raw" / dry_name) != sha(new / "raw" / dry_name):
     raise ValueError("Dry comparison inputs differ")
 old_protocol = json.loads((old / "raw/protocol.json").read_text())
 new_protocol = json.loads((new / "raw/protocol.json").read_text())
-if old_protocol != new_protocol:
+if old_protocol["defaults"] != new_protocol["defaults"]:
     raise ValueError("Comparison protocols/defaults differ")
 
 comparisons = []
-for mode, name in enumerate(("off", "silicon", "germanium")):
-    file = f"synthetic_plucks_4x_mode{mode}_voice1.wav"
-    old_rate, before = read_float_wave(old / "raw" / file)
-    new_rate, after = read_float_wave(new / "raw" / file)
-    if old_rate != new_rate or before.shape != after.shape:
-        raise ValueError("Comparison rate/shape mismatch")
-    before_rms = float(np.sqrt(np.mean(before[:4 * old_rate] ** 2)))
-    after_rms = float(np.sqrt(np.mean(after[:4 * new_rate] ** 2)))
-    if min(before_rms, after_rms) <= 0: raise ValueError("Silent comparison")
-    target = min(before_rms, after_rms)
-    gains = (target / before_rms, target / after_rms)
-    for label, folder, audio, gain in (("original", old, before, gains[0]), ("corrected", new, after, gains[1])):
-        shutil.copyfile(folder / "raw" / file, output / f"{name}-{label}-raw.wav")
-        write_pcm24(output / f"{name}-{label}-rms-matched.wav", old_rate, audio * gain)
-    comparisons.append({"mode": name, "original_source_sha256": sha(old / "raw" / file),
-                        "corrected_source_sha256": sha(new / "raw" / file),
-                        "original_rms_dbfs": 20 * math.log10(before_rms),
-                        "corrected_rms_dbfs": 20 * math.log10(after_rms),
-                        "original_listening_gain_db": 20 * math.log10(gains[0]),
-                        "corrected_listening_gain_db": 20 * math.log10(gains[1])})
+for voice in ((0, 1) if args.include_hi else (1,)):
+    for mode, name in enumerate(("off", "silicon", "germanium")):
+        file = f"synthetic_plucks_4x_mode{mode}_voice{voice}.wav"
+        case = name if voice == 1 else name + "-hi"
+        old_rate, before = read_float_wave(old / "raw" / file)
+        new_rate, after = read_float_wave(new / "raw" / file)
+        if old_rate != new_rate or before.shape != after.shape:
+            raise ValueError("Comparison rate/shape mismatch")
+        before_rms = float(np.sqrt(np.mean(before[:4 * old_rate] ** 2)))
+        after_rms = float(np.sqrt(np.mean(after[:4 * new_rate] ** 2)))
+        if min(before_rms, after_rms) <= 0: raise ValueError("Silent comparison")
+        target = min(before_rms, after_rms)
+        gains = (target / before_rms, target / after_rms)
+        for label, folder, audio, gain in (("original", old, before, gains[0]), ("corrected", new, after, gains[1])):
+            shutil.copyfile(folder / "raw" / file, output / f"{case}-{label}-raw.wav")
+            write_pcm24(output / f"{case}-{label}-rms-matched.wav", old_rate, audio * gain)
+        comparisons.append({"mode": name, "voicing": "Hi" if voice == 0 else "Lo", "original_source_sha256": sha(old / "raw" / file),
+                            "corrected_source_sha256": sha(new / "raw" / file),
+                            "original_rms_dbfs": 20 * math.log10(before_rms),
+                            "corrected_rms_dbfs": 20 * math.log10(after_rms),
+                            "original_listening_gain_db": 20 * math.log10(gains[0]),
+                            "corrected_listening_gain_db": 20 * math.log10(gains[1])})
 shutil.copyfile(new / "raw" / dry_name, output / dry_name)
 metadata = {"stimulus": "synthetic plucks, not recorded guitar", "dry_sha256": sha(new / "raw" / dry_name),
             "parameters": new_protocol["defaults"], "sample_rate": 48000,
-            "comparison": "same input and control values; tone direction intentionally corrected",
+            "comparison": "same input and control values; changed DSP revision documented in the review",
             "matching": "RMS over first four seconds; attenuate louder version only; no perceptual-loudness claim",
             "compensation_is_in_plugin": False, "modes": comparisons}
 (output / "listening-settings.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+if args.audio_only:
+    print(output)
+    raise SystemExit(0)
 
 old_tone, new_tone = rows(old / "raw/tone.csv"), rows(new / "tone-reference.csv")
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), constrained_layout=True)

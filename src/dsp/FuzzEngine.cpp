@@ -8,7 +8,6 @@ void FuzzEngine::prepare(double newSampleRate, int maximumBlockSize, int channel
     maxBlockSize = maximumBlockSize;
     numChannels = channels;
 
-    inputVoicingStage.prepare(sampleRate, maxBlockSize, numChannels);
     toneStack.prepare(sampleRate, maxBlockSize, numChannels);
     highControlFilter.prepare(sampleRate, maxBlockSize, numChannels);
     outputStage.prepare(sampleRate, maxBlockSize, numChannels);
@@ -31,6 +30,8 @@ void FuzzEngine::prepare(double newSampleRate, int maximumBlockSize, int channel
     resetSmoother(oversamplingTransitionSmoothed, sampleRate, 0.006, 1.0f);
 
     sustainValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
+    inputGainValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
+    voicingValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
     toneValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
     highValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
     volumeValues.assign(static_cast<size_t>(maxBlockSize), 0.0f);
@@ -42,6 +43,7 @@ void FuzzEngine::reset()
 {
     inputVoicingStage.reset();
     preGainStage.reset();
+    sustainStage.reset();
     clippingStageA.reset();
     clippingStageB.reset();
     toneStack.reset();
@@ -105,17 +107,13 @@ void FuzzEngine::processBlock(juce::AudioBuffer<float>& buffer)
         const auto clippingMode = clippingModeMorphSmoothed.getNextValue();
 
         sustainValues[static_cast<size_t>(sample)] = sustain;
+        inputGainValues[static_cast<size_t>(sample)] = inputGain;
+        voicingValues[static_cast<size_t>(sample)] = voicing;
         toneValues[static_cast<size_t>(sample)] = tone;
         highValues[static_cast<size_t>(sample)] = high;
         volumeValues[static_cast<size_t>(sample)] = volume;
         clippingModeValues[static_cast<size_t>(sample)] = clippingMode;
         oversamplingTransitionValues[static_cast<size_t>(sample)] = oversamplingTransitionSmoothed.getNextValue();
-
-        for (auto channel = 0; channel < numChannels; ++channel)
-        {
-            auto* channelData = buffer.getWritePointer(channel);
-            channelData[sample] = inputVoicingStage.processSample(channel, channelData[sample], inputGain, voicing);
-        }
     }
 
     oversamplingEngine.processBlock(buffer, [this, numSamples](auto& oversampledBlock, int oversamplingFactor)
@@ -127,15 +125,19 @@ void FuzzEngine::processBlock(juce::AudioBuffer<float>& buffer)
         {
             const auto baseIndex = juce::jlimit(0, numSamples - 1, sample / oversamplingFactor);
             const auto sustain = sustainValues[static_cast<size_t>(baseIndex)];
+            const auto inputGain = inputGainValues[static_cast<size_t>(baseIndex)];
+            const auto voicing = voicingValues[static_cast<size_t>(baseIndex)];
             const auto clippingMode = clippingModeValues[static_cast<size_t>(baseIndex)];
 
             for (auto channel = 0; channel < oversampledChannels; ++channel)
             {
                 auto* channelData = oversampledBlock.getChannelPointer(static_cast<size_t>(channel));
                 auto nonlinearSample = channelData[sample];
-                nonlinearSample = preGainStage.processSample(channel, nonlinearSample, sustain);
-                nonlinearSample = clippingStageA.processSample(channel, nonlinearSample, sustain);
-                nonlinearSample = clippingStageB.processSample(channel, nonlinearSample, sustain, clippingMode);
+                nonlinearSample = inputVoicingStage.processSample(channel, nonlinearSample, inputGain, voicing);
+                nonlinearSample = preGainStage.processSample(channel, nonlinearSample);
+                nonlinearSample = sustainStage.processSample(channel, nonlinearSample, sustain, voicing);
+                nonlinearSample = clippingStageA.processSample(channel, nonlinearSample);
+                nonlinearSample = clippingStageB.processSample(channel, nonlinearSample, clippingMode);
                 channelData[sample] = clampAudio(nonlinearSample);
             }
         }
@@ -169,6 +171,8 @@ void FuzzEngine::updateNonlinearSampleRate()
     const auto oversampledBlockSize = maxBlockSize * oversamplingEngine.getFactor();
 
     preGainStage.prepare(oversampledRate, oversampledBlockSize, numChannels);
+    inputVoicingStage.prepare(oversampledRate, oversampledBlockSize, numChannels);
+    sustainStage.prepare(oversampledRate, oversampledBlockSize, numChannels);
     clippingStageA.prepare(oversampledRate, oversampledBlockSize, numChannels);
     clippingStageB.prepare(oversampledRate, oversampledBlockSize, numChannels);
 }

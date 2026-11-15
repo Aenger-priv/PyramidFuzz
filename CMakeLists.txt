@@ -48,6 +48,8 @@ target_sources(PyramidFuzz
         src/dsp/FuzzEngine.h
         src/dsp/HighControlFilter.h
         src/dsp/InputVoicingStage.h
+        src/dsp/InputCircuit.h
+        src/dsp/SustainStage.h
         src/dsp/OversamplingEngine.h
         src/dsp/OutputStage.h
         src/dsp/PreGainStage.h
@@ -82,6 +84,8 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
     src/dsp/FuzzEngine.h
     src/dsp/HighControlFilter.h
     src/dsp/InputVoicingStage.h
+    src/dsp/InputCircuit.h
+    src/dsp/SustainStage.h
     src/dsp/OversamplingEngine.h
     src/dsp/OutputStage.h
     src/dsp/PreGainStage.h
@@ -116,5 +120,9 @@ if(BUILD_TESTING)
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/validate_tone_capture.py"
                     --executable "$<TARGET_FILE:PyramidFuzzMeasurements>")
         set_tests_properties(PyramidFuzzToneResponseTests PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
+        add_test(NAME PyramidFuzzInputResponseTests
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/validate_input_capture.py"
+                    --executable "$<TARGET_FILE:PyramidFuzzMeasurements>")
+        set_tests_properties(PyramidFuzzInputResponseTests PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
     endif()
 endif()

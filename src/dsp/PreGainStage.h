@@ -1,54 +1,36 @@
 #pragma once
 
-#include "DspUtilities.h"
+#include "InputCircuit.h"
 
 namespace pyramidfuzz::dsp
 {
 class PreGainStage
 {
 public:
-    void prepare(double newSampleRate, int, int channels)
+    void prepare(double rate, int, int channels)
     {
-        sampleRate = newSampleRate;
-        couplingHighPass.resize(static_cast<size_t>(channels));
-        inputLowPass.resize(static_cast<size_t>(channels));
-        outputLowPass.resize(static_cast<size_t>(channels));
-
-        for (auto channel = 0; channel < channels; ++channel)
-        {
-            couplingHighPass[static_cast<size_t>(channel)].setCoefficients(makeHighPass(sampleRate, 85.0f, 0.74f));
-            inputLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 6400.0f, 0.68f));
-            outputLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 5200.0f, 0.86f));
-        }
-
+        using namespace inputcircuit;
+        const auto q4 = preamp();
+        filters.resize(static_cast<size_t>(channels));
+        for (auto& filter : filters)
+            filter.setAnalog(rate, q4.effectiveTransconductance - 1.0 / feedbackResistance,
+                -feedbackCapacitance, 0, 1.0 / collectorResistance + 1.0 / feedbackResistance, feedbackCapacitance, 0);
+        // Polarity-normalized collector signal: positive moves toward saturation,
+        // negative toward the supply. This preserves the engine's sign convention.
+        positiveHeadroom = q4.collectorVoltage - q4.emitterVoltage - 0.2;
+        negativeHeadroom = supply - q4.collectorVoltage;
         reset();
     }
-
-    void reset()
+    void reset() { for (auto& filter : filters) filter.reset(); }
+    float processSample(int channel, float sample)
     {
-        for (auto& filter : couplingHighPass)
-            filter.reset();
-
-        for (auto& filter : inputLowPass)
-            filter.reset();
-
-        for (auto& filter : outputLowPass)
-            filter.reset();
+        const double x = filters[static_cast<size_t>(channel)].process(sample);
+        const double headroom = x >= 0 ? positiveHeadroom : negativeHeadroom;
+        // Monotonic unity-slope soft headroom limit; no quadratic foldback.
+        return static_cast<float>(headroom * std::tanh(x / headroom));
     }
-
-    float processSample(int channel, float sample, float sustain)
-    {
-        const auto filtered = inputLowPass[static_cast<size_t>(channel)].process(couplingHighPass[static_cast<size_t>(channel)].process(sample));
-        const auto drive = 2.0f + sustain * 2.6f;
-        const auto saturated = asymSoftClip(filtered * drive, 0.134f);
-        const auto blended = lerp(filtered * 0.82f, saturated, 0.78f);
-        return clampAudio(outputLowPass[static_cast<size_t>(channel)].process(blended * 0.96f));
-    }
-
 private:
-    double sampleRate { 44100.0 };
-    std::vector<Biquad> couplingHighPass;
-    std::vector<Biquad> inputLowPass;
-    std::vector<Biquad> outputLowPass;
+    std::vector<inputcircuit::CircuitFilter> filters;
+    double positiveHeadroom = 5, negativeHeadroom = 3;
 };
-} // namespace pyramidfuzz::dsp
+}

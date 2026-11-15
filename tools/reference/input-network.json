@@ -1,0 +1,22 @@
+{
+  "description": "Nominal Q4 input/preamp and R24 coupling network, transcribed from repository schematic. Device assumptions are not hardware measurements.",
+  "supply": 9.0,
+  "vbe": 0.65,
+  "thermal_voltage": 0.02585,
+  "q4_beta": 500.0,
+  "q4_emitter": 1000.0,
+  "q3_beta": 600.0,
+  "q3_emitter": 100.0,
+  "collector": 10000.0,
+  "base_bias": 100000.0,
+  "feedback": 470000.0,
+  "feedback_cap": 4.7e-10,
+  "input_cap": 1e-5,
+  "hi": 39000.0,
+  "lo": 390000.0,
+  "pot": 100000.0,
+  "pot_bottom": 1000.0,
+  "c4": 4.7e-7,
+  "c5": 4.7e-8,
+  "r19": 6200.0
+}

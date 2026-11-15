@@ -10,13 +10,11 @@ public:
     void prepare(double newSampleRate, int, int channels)
     {
         sampleRate = newSampleRate;
-        preHighPass.resize(static_cast<size_t>(channels));
         preLowPass.resize(static_cast<size_t>(channels));
         postLowPass.resize(static_cast<size_t>(channels));
 
         for (auto channel = 0; channel < channels; ++channel)
         {
-            preHighPass[static_cast<size_t>(channel)].setCoefficients(makeHighPass(sampleRate, 92.0f, 0.72f));
             preLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 7000.0f, 0.66f));
             postLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 4200.0f, 0.88f));
         }
@@ -26,9 +24,6 @@ public:
 
     void reset()
     {
-        for (auto& filter : preHighPass)
-            filter.reset();
-
         for (auto& filter : preLowPass)
             filter.reset();
 
@@ -36,11 +31,12 @@ public:
             filter.reset();
     }
 
-    float processSample(int channel, float sample, float sustain)
+    float processSample(int channel, float sample)
     {
-        const auto filtered = preLowPass[static_cast<size_t>(channel)].process(preHighPass[static_cast<size_t>(channel)].process(sample));
-        const auto drive = 5.2f + sustain * 12.8f;
-        const auto shaped = filtered * drive;
+        // C5/R19 coupling is now in SustainStage. Retain the previous full-drive
+        // transfer and bandwidth until the separate clipping calibration step.
+        const auto filtered = preLowPass[static_cast<size_t>(channel)].process(sample);
+        const auto shaped = filtered * 18.0f;
 
         // This stage is tuned for a thicker, woollier Muff-family core rather than a bright OD-style clip.
         const auto weighted = shaped + 0.26f * shaped * shaped * shaped;
@@ -52,7 +48,6 @@ public:
 
 private:
     double sampleRate { 44100.0 };
-    std::vector<Biquad> preHighPass;
     std::vector<Biquad> preLowPass;
     std::vector<Biquad> postLowPass;
 };
@@ -97,13 +92,13 @@ public:
             filter.reset();
     }
 
-    float processSample(int channel, float sample, float sustain, float modeMorph)
+    float processSample(int channel, float sample, float modeMorph)
     {
         const auto filtered = preLowPass[static_cast<size_t>(channel)].process(preHighPass[static_cast<size_t>(channel)].process(sample));
 
-        const auto offDrive = filtered * (1.24f + sustain * 1.10f);
-        const auto siliconDrive = filtered * (2.6f + sustain * 3.8f);
-        const auto germaniumDrive = filtered * (2.2f + sustain * 3.2f);
+        const auto offDrive = filtered * 2.34f;
+        const auto siliconDrive = filtered * 6.4f;
+        const auto germaniumDrive = filtered * 5.4f;
 
         // In bypass mode, only the diode feedback is removed. The transistor
         // stage still has finite headroom, but is appreciably more open than a

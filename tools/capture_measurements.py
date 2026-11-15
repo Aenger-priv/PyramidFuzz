@@ -132,7 +132,10 @@ def analyse(folder):
                                     "magnitude_db": db(response(f, .5, .5, overrides={"Rsource": rs, "Rload": rl}))})
     write_csv(folder / "loading-sensitivity.csv", list(sensitivity[0]), sensitivity)
     ids = sorted({int(r["case_id"]) for r in stages})
-    if len(ids) != 117 or len(stages) != 117 * 8 or len(harmonics) != 117 * 32:
+    stage_names = {r["stage"] for r in stages}
+    expected_stages = {"dry", "input_voicing", "pre_gain", "sustain", "clip_a", "clip_b", "downsampled", "tone", "output"}
+    if (len(ids) != 117 or stage_names != expected_stages or len(stages) != 117 * len(expected_stages)
+            or len(harmonics) != 117 * 32):
         raise ValueError("Incomplete gain/stage/harmonic matrix")
     tap_error = max(float(r["tap_max_error"]) for r in stages + renders)
     if tap_error > 1e-6:
@@ -160,7 +163,7 @@ def analyse(folder):
             "mode_levels_at_minus24_peak_dbfs_lo_4x": mode_levels,
             "max_tone_impulse_tail_peak": max(float(r["impulse_tail_peak"]) for r in tone),
             "wavs": wavs,
-            "limits": "Capture completeness/safety only. Known schematic mismatch is recorded, not accepted as correct. No alias, CPU, hardware-match, or listening approval is implied."}
+            "limits": "Capture completeness/safety only. Use separate circuit-response checks for model consistency. No alias, CPU, hardware-match, or listening approval is implied."}
 
 
 def main():
