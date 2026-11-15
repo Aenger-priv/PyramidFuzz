@@ -5,6 +5,10 @@ artwork, and JUCE pin are unchanged from `b98a3becd07118bd6d0b7995c1a5a6e5c293a7
 Step 1 is implemented; review the baseline and proposed limits below before
 approving Step 2. No tone correction or other sonic revision has been applied.
 
+This is the historical Step 1 record. The subsequent approved correction is
+documented in [the Step 2 review](tone-correction-review.md); baseline archives
+and measurements remain untouched.
+
 ## Saved-session decision
 
 The user chose to use the revised sound in existing sessions and retain the
@@ -170,5 +174,7 @@ ctest --test-dir build -C Debug --output-on-failure
 
 For later intentional DSP revisions, omit `--baseline-ref b98a3be`; the manifest
 still records working sources and hashes. Use a new directory for each capture.
+Recreating the original baseline requires restoring its preserved source and
+measurement snapshot; the baseline guard deliberately rejects corrected DSP.
 Preservation archives are made separately; the capture command does not archive
 or install host binaries. Large binaries/renders remain local, outside Git.

@@ -44,11 +44,13 @@ DSP is organized under `src/dsp/` as discrete blocks:
 - `ToneStack`
   - Solves a five-node passive network by trapezoidal nodal analysis
   - Uses 0.022 uF C8 and 25 kOhm R8, with assumed 10 kOhm source and 220 kOhm recovery loading
-  - The Step 1 review confirmed that R8/C8 are transcribed as a second high-pass branch instead of the drawn low-pass branch; correction awaits Step 2 approval
+  - Step 2 corrects R8 to series resistance and C8 to ground, preserving the C9/R5 high-pass branch and C3 output coupling
+  - Tone runs from dark to bright; increasing High reduces R8 and raises the low-pass corner. Passive source loading means its effect depends on Tone
+  - The independent AC grid check covers 75 settings at 44.1/48/96 kHz; the source/load assumptions remain approximations
 
 - `HighControlFilter`
   - Retained as a reusable contour block, but bypassed in the main path
-  - `High` changes the modeled R8 resistance in `ToneStack`; its network wiring needs the correction documented below
+  - `High` changes the modeled series R8 resistance in `ToneStack`
 
 - `OutputStage`
   - Applies recovery gain and a small amount of final glue saturation before volume scaling
@@ -116,9 +118,11 @@ This keeps the strongest alias generators inside the oversampled path while leav
 
 [Step 1's review](baseline-review.md) records the unchanged `b98a3be` DSP, archived original builds, circuit variant, independent AC netlist, measured results, session policy, and proposed gates. `tools/Measurements.cpp` uses production DSP classes; a fixed-control tap adapter is checked sample by sample against `FuzzEngine`. It is an offline tool and does not add branches or instrumentation to the plugin's audio callback. The independent Python reference imports no production DSP. Large captures are local under ignored `artifacts/`.
 
+[Step 2's review](tone-correction-review.md) records the corrected passive network and intended control mapping. CTest compares measured magnitude/phase against the unchanged independent netlist and checks tone-only smoothed control sweeps. Input, preamp, clipping, oversampling and recovery code are unchanged. Default values and parameter identifiers are unchanged, but existing settings intentionally render with the corrected tone response. Listening comparisons apply gain only to separate exported files.
+
 ## Refinement priorities
 
-1. Review the Step 1 reference assumptions and correct the tone network.
+1. Audition the corrected tone network, including a real guitar DI comparison; revisit source/recovery loading when calibrating the surrounding stages.
 2. Align input loading and Sustain placement with the schematic.
 3. Calibrate clipping, coupling, and recovery against measurements and listening.
 4. Measure aliasing, CPU, quality switching, and host automation behavior.

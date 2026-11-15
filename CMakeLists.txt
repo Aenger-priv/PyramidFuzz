@@ -112,5 +112,9 @@ if(BUILD_TESTING)
         add_test(NAME PyramidFuzzToneReferenceTests
             COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s "${CMAKE_CURRENT_SOURCE_DIR}/tests" -p "test_*.py")
         set_tests_properties(PyramidFuzzToneReferenceTests PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
+        add_test(NAME PyramidFuzzToneResponseTests
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/validate_tone_capture.py"
+                    --executable "$<TARGET_FILE:PyramidFuzzMeasurements>")
+        set_tests_properties(PyramidFuzzToneResponseTests PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
     endif()
 endif()

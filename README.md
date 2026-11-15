@@ -6,7 +6,7 @@ Pyramid Fuzz is a JUCE guitar fuzz for macOS, inspired by a modified Ram's Head 
 
 - **Input** adjusts the signal level entering the fuzz.
 - **Sustain** adjusts the gain and compression of the fuzz stages.
-- **Tone** sweeps the passive tone network from darker to brighter; **High** adjusts its high-frequency branch.
+- **Tone** sweeps the passive tone network from darker to brighter; **High** reduces the low-pass branch's series resistance to extend its upper response. These passive controls interact.
 - **Volume** sets the output level.
 - **Voicing** selects the tighter Hi input or the fuller, lower-drive Lo input.
 - **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off retains the gain stage with a more open response.
@@ -44,13 +44,15 @@ The build also supports an installed JUCE CMake package when the `JUCE/` submodu
 CMake testing is enabled by default. Build and run the offline DSP checks with:
 
 ```bash
-cmake --build build --config Debug --target PyramidFuzzDspTests
+cmake --build build --config Debug --target PyramidFuzzDspTests PyramidFuzzMeasurements
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
 The checks cover clipping-knee continuity, finite output, stereo consistency, and signal flow at 44.1, 48, and 96 kHz across the clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain useful steps for assessing sound and host behavior.
 
 When Python 3 is available, CTest also runs independent passive-circuit reference checks. The optional `PyramidFuzzMeasurements` target captures tone responses, stage levels, harmonics, and unnormalized synthetic/DI audio without changing the plugin DSP. See [the baseline review](docs/baseline-review.md) for commands, preserved-build details, results, and proposed acceptance limits. Generated bundles live under the ignored `artifacts/` directory.
+
+The tone-network correction and dark-to-bright mapping intentionally change the sound of existing settings. The corrected network passes the independent circuit-response checks; see [the Step 2 review](docs/tone-correction-review.md) for measurements and listening comparisons. The original build remains archived separately.
 
 ## Project layout
 

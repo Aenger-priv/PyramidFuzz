@@ -190,6 +190,47 @@ void measureTone(const juce::File& folder)
             }
 }
 
+void measureToneDynamics(const juce::File& folder)
+{
+    auto stream = csv(folder, "tone-dynamics.csv");
+    stream << "sample_rate,peak,max_sample_step,stereo_error,tail_peak\n";
+    for (double rate : {44100.0, 48000.0, 96000.0})
+    {
+        ToneStack stack;
+        stack.prepare(rate, blockSize, 2);
+        juce::SmoothedValue<float> tone, high;
+        resetSmoother(tone, rate, 0.03, 0.0f);
+        resetSmoother(high, rate, 0.03, 0.0f);
+        const float toneTargets[] = {0, 1, 1, 0, .25f, .75f, .5f, 1, 0};
+        const float highTargets[] = {0, 0, 1, 1, .75f, .25f, .5f, 0, 1};
+        double peak = 0, maxStep = 0, stereoError = 0, tailPeak = 0;
+        float previous = 0;
+        for (int i = 0; i < int(2 * rate); ++i)
+        {
+            const double time = i / rate;
+            if (i % blockSize == 0 && time < 1.5)
+            {
+                const int index = std::min(8, int(time / .15));
+                tone.setTargetValue(toneTargets[index]);
+                high.setTargetValue(highTargets[index]);
+            }
+            const auto t = tone.getNextValue(), h = high.getNextValue();
+            const double fade = std::clamp((1.5 - time) / .02, 0.0, 1.0);
+            const auto input = float(fade * (.07 * std::sin(2 * juce::MathConstants<double>::pi * 110 * time)
+                                            + .03 * std::sin(2 * juce::MathConstants<double>::pi * 5000 * time)));
+            const float left = stack.processSample(0, input, t, h);
+            const float right = stack.processSample(1, input, t, h);
+            if (!std::isfinite(left) || !std::isfinite(right)) throw std::runtime_error("Non-finite automated tone output");
+            peak = std::max(peak, double(std::abs(left)));
+            maxStep = std::max(maxStep, double(std::abs(left - previous)));
+            stereoError = std::max(stereoError, double(std::abs(left - right)));
+            if (time > 1.9) tailPeak = std::max(tailPeak, double(std::abs(left)));
+            previous = left;
+        }
+        stream << rate << ',' << peak << ',' << maxStep << ',' << stereoError << ',' << tailPeak << '\n';
+    }
+}
+
 void measureGain(const juce::File& folder)
 {
     auto stages = csv(folder, "stages.csv");
@@ -312,12 +353,14 @@ int main(int argc, char** argv)
     {
         juce::String output;
         juce::StringArray di;
+        bool toneOnly = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string arg(argv[i]);
             if (arg == "--output" && i + 1 < argc) output = argv[++i];
             else if (arg == "--di" && i + 1 < argc) di.add(argv[++i]);
-            else throw std::runtime_error("Usage: PyramidFuzzMeasurements --output NEW_FOLDER [--di WAV_OR_AIFF]...");
+            else if (arg == "--tone-only") toneOnly = true;
+            else throw std::runtime_error("Usage: PyramidFuzzMeasurements --output NEW_FOLDER [--tone-only | --di WAV_OR_AIFF]...");
         }
         if (output.isEmpty()) throw std::runtime_error("--output is required");
         const auto folder = juce::File::getCurrentWorkingDirectory().getChildFile(output);
@@ -339,10 +382,14 @@ int main(int argc, char** argv)
         protocol.close();
         std::cout << "Measuring tone impulse grid..." << std::endl;
         measureTone(folder);
-        std::cout << "Measuring gain, harmonics, and stage taps..." << std::endl;
-        measureGain(folder);
-        std::cout << "Rendering synthetic plucks and optional DI..." << std::endl;
-        measureRenders(folder, di);
+        measureToneDynamics(folder);
+        if (!toneOnly)
+        {
+            std::cout << "Measuring gain, harmonics, and stage taps..." << std::endl;
+            measureGain(folder);
+            std::cout << "Rendering synthetic plucks and optional DI..." << std::endl;
+            measureRenders(folder, di);
+        }
         std::cout << "Measurements complete: " << folder.getFullPathName() << std::endl;
         return 0;
     }

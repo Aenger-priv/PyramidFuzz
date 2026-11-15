@@ -7,7 +7,8 @@
 namespace pyramidfuzz::dsp
 {
 // Trapezoidal/MNA model of the modified Ram's Head passive tone circuit.
-// Nodes: Q2 collector, C9 arm, C8/R8 arm, R25 wiper, and Q4 input.
+// Nodes: Q2 collector, C9 high-pass arm, R8/C8 low-pass arm, R25 wiper,
+// and Q1 recovery input. Source/load impedances are explicit approximations.
 class ToneStack
 {
 public:
@@ -37,30 +38,31 @@ public:
         constexpr auto recoveryInput = 4;
 
         // Q2 collector is represented by its 10 k collector resistor. C9/R5
-        // and C8/R8 are the two passive branches; C3 couples the pot wiper
+        // and R8/C8 are the two passive branches; C3 couples the pot wiper
         // to the recovery transistor's input impedance.
         addResistorToKnownVoltage(matrix, rhs, collector, 10000.0f, source);
         addResistorToGround(matrix, c9Arm, 470000.0f); // R5
 
-        // R8 uses lugs 1 and 2, making it a 0-25 k rheostat. Higher UI values
-        // reduce shunt loss and therefore increase the audible high branch.
+        // R8 is SERIES resistance into the low-pass arm; C8 shunts that arm
+        // to ground. Reducing R8 raises its corner as High increases.
         const auto r8 = juce::jmax(20.0f, (1.0f - juce::jlimit(0.0f, 1.0f, high)) * 25000.0f);
-        addResistorToGround(matrix, c8Arm, r8);
+        addResistor(matrix, collector, c8Arm, r8);
         addResistorToGround(matrix, recoveryInput, 220000.0f);
 
         constexpr auto potResistance = 250000.0f;
         constexpr auto endStopResistance = 30.0f;
         const auto position = juce::jlimit(0.0f, 1.0f, tone);
-        addResistor(matrix, c9Arm, wiper, juce::jmax(endStopResistance, position * potResistance));
-        addResistor(matrix, c8Arm, wiper, juce::jmax(endStopResistance, (1.0f - position) * potResistance));
+        // Tone=0 selects the dark arm; Tone=1 selects the bright arm.
+        addResistor(matrix, c9Arm, wiper, juce::jmax(endStopResistance, (1.0f - position) * potResistance));
+        addResistor(matrix, c8Arm, wiper, juce::jmax(endStopResistance, position * potResistance));
 
         stampCapacitor(matrix, rhs, collector, c9Arm, 0.01e-6f, state.c9);
-        stampCapacitor(matrix, rhs, collector, c8Arm, 0.022e-6f, state.c8);
+        stampGroundedCapacitor(matrix, rhs, c8Arm, 0.022e-6f, state.c8);
         stampCapacitor(matrix, rhs, wiper, recoveryInput, 0.047e-6f, state.c3);
 
         const auto voltages = solve(matrix, rhs);
         updateCapacitor(state.c9, voltages[collector] - voltages[c9Arm], 0.01e-6f);
-        updateCapacitor(state.c8, voltages[collector] - voltages[c8Arm], 0.022e-6f);
+        updateCapacitor(state.c8, voltages[c8Arm], 0.022e-6f);
         updateCapacitor(state.c3, voltages[wiper] - voltages[recoveryInput], 0.047e-6f);
         return clampAudio(voltages[recoveryInput]);
     }
@@ -112,6 +114,14 @@ private:
         const auto historyCurrent = -conductance * state.voltage - state.current;
         state.current = conductance * voltage + historyCurrent;
         state.voltage = voltage;
+    }
+
+    void stampGroundedCapacitor(Matrix& matrix, Vector& rhs, int node, float capacitance, const CapacitorState& state) const
+    {
+        const auto conductance = 2.0f * capacitance * static_cast<float>(sampleRate);
+        const auto historyCurrent = -conductance * state.voltage - state.current;
+        matrix[static_cast<size_t>(node)][static_cast<size_t>(node)] += conductance;
+        rhs[static_cast<size_t>(node)] -= historyCurrent;
     }
 
     static Vector solve(Matrix matrix, Vector rhs)

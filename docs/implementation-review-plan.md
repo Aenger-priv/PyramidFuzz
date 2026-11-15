@@ -1,8 +1,9 @@
 # Implementation review and proposed revision plan
 
 Date: 2026-11-15. Reviewed baseline: `b98a3be` on `main`.
-Status: Step 1 was approved and implemented. Its [baseline and proposed limits](baseline-review.md)
-are ready for review; Steps 2–7 await separate approval.
+Status: Steps 1 and 2 were approved and implemented. Step 2 passes its numerical
+checks; its [listening review](tone-correction-review.md) remains open. Steps 3–7
+await separate approval.
 
 ## Direction
 
@@ -214,7 +215,8 @@ and approval of the resulting sound and interface.
 
 ## Current review gate
 
-Step 1 is complete without DSP changes. The user chose revised sound for existing
-sessions with the original build retained separately, rather than a legacy model.
-Review the baseline, independent reference, source/load assumptions and proposed
-measurement limits before approving Step 2's tone-network correction.
+Step 2's tone-network correction is implemented and passes the Step 1 numerical
+limits. The user chose revised sound for existing sessions with the original
+build retained separately, rather than a legacy model. Review the comparison
+files and audition a real guitar DI before accepting the sound and proceeding
+to Step 3. Synthetic files establish a repeatable comparison, not playing feel.
