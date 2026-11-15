@@ -50,10 +50,13 @@ ctest --test-dir build -C Debug --output-on-failure
 
 The checks cover clipping-knee continuity, finite output, stereo consistency, and signal flow at 44.1, 48, and 96 kHz across the clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain useful steps for assessing sound and host behavior.
 
+When Python 3 is available, CTest also runs independent passive-circuit reference checks. The optional `PyramidFuzzMeasurements` target captures tone responses, stage levels, harmonics, and unnormalized synthetic/DI audio without changing the plugin DSP. See [the baseline review](docs/baseline-review.md) for commands, preserved-build details, results, and proposed acceptance limits. Generated bundles live under the ignored `artifacts/` directory.
+
 ## Project layout
 
 - `src/PluginProcessor.*` and `src/PluginEditor.*`: plugin integration, parameters, and interface.
 - `src/dsp/`: fuzz stages, tone network, and oversampling.
 - `tests/`: offline DSP checks.
+- `tools/`: offline measurements, independent circuit reference, and plotting.
 - [docs/architecture.md](docs/architecture.md): signal path and implementation details.
 - [docs/schematic-analysis.md](docs/schematic-analysis.md): notes on the source schematic.

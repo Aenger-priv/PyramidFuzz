@@ -21,9 +21,9 @@ The repository is now set up as a JUCE audio plugin shell with a first-pass fuzz
 DSP is organized under `src/dsp/` as discrete blocks:
 
 - `InputVoicingStage`
-  - Handles input gain conditioning plus the schematic's Hi / Lo input loading
-  - Models the C1 coupling behaviour and 39 kOhm / 390 kOhm input-resistor paths
-  - Lo retains more bass but has lower drive, as in the higher-resistance path
+  - Handles input gain conditioning and a tuned Hi / Lo approximation
+  - Uses fixed filter curves and gain factors; these are not yet derived from C1 and the 39 kOhm / 390 kOhm input-resistor paths
+  - Lo currently retains more bass and has lower drive
 
 - `PreGainStage`
   - Models the first transistor-like stage as coupling-style filtering into mild asymmetric saturation
@@ -42,12 +42,13 @@ DSP is organized under `src/dsp/` as discrete blocks:
     - Germanium: lower threshold, softer knee, slight asymmetry
 
 - `ToneStack`
-  - Solves the modified C9/R5, C8/R8, R25 and C3 passive network by trapezoidal nodal analysis
-  - Uses the confirmed 0.022 uF C8 and 25 kOhm R8 as component values, including source and recovery-stage loading
+  - Solves a five-node passive network by trapezoidal nodal analysis
+  - Uses 0.022 uF C8 and 25 kOhm R8, with assumed 10 kOhm source and 220 kOhm recovery loading
+  - The Step 1 review confirmed that R8/C8 are transcribed as a second high-pass branch instead of the drawn low-pass branch; correction awaits Step 2 approval
 
 - `HighControlFilter`
   - Retained as a reusable contour block, but bypassed in the main path
-  - `High` is now the actual R8 rheostat in `ToneStack`, as wired in the schematic
+  - `High` changes the modeled R8 resistance in `ToneStack`; its network wiring needs the correction documented below
 
 - `OutputStage`
   - Applies recovery gain and a small amount of final glue saturation before volume scaling
@@ -108,11 +109,17 @@ This keeps the strongest alias generators inside the oversampled path while leav
 - The tone stack solves a simplified passive network with approximated source and load impedances; it is not a complete transistor-level circuit simulation.
 - The clipping stages are tuned transfer functions rather than literal diode equations.
 - Filter controls that are implemented as path blends are smoothed musically, but the design is still intended for refinement by ear.
+- Sustain currently changes drive in all three nonlinear stages; the schematic places R24 after the input preamp. A later step will address this gain distribution.
+- The 24 Hz blocker in `ClippingStageB` is attributed to C3 in its comment, while `ToneStack` already models C3 after the wiper. This needs resolution during the coupling review.
+
+## Measurement baseline
+
+[Step 1's review](baseline-review.md) records the unchanged `b98a3be` DSP, archived original builds, circuit variant, independent AC netlist, measured results, session policy, and proposed gates. `tools/Measurements.cpp` uses production DSP classes; a fixed-control tap adapter is checked sample by sample against `FuzzEngine`. It is an offline tool and does not add branches or instrumentation to the plugin's audio callback. The independent Python reference imports no production DSP. Large captures are local under ignored `artifacts/`.
 
 ## Refinement priorities
 
-1. Tune the clipping transfer constants by ear against a target pedal reference.
-2. Improve the tone stack fit so the bright side cuts harder without adding fizz.
-3. Refine output calibration and perceived loudness across clipping modes.
-4. Expand offline checks with measured response and reference recordings.
-5. Validate host behavior and automation smoothness in GarageBand.
+1. Review the Step 1 reference assumptions and correct the tone network.
+2. Align input loading and Sustain placement with the schematic.
+3. Calibrate clipping, coupling, and recovery against measurements and listening.
+4. Measure aliasing, CPU, quality switching, and host automation behavior.
+5. Complete the UI/UX and GarageBand validation gates in the [revision plan](implementation-review-plan.md).

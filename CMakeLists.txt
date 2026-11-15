@@ -98,4 +98,19 @@ if(BUILD_TESTING)
     target_compile_definitions(PyramidFuzzDspTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(PyramidFuzzDspTests PRIVATE juce::juce_audio_utils juce::juce_dsp)
     add_test(NAME PyramidFuzzDspTests COMMAND PyramidFuzzDspTests)
+
+    # Offline measurements use the production stages without changing plugin DSP.
+    juce_add_console_app(PyramidFuzzMeasurements PRODUCT_NAME "Pyramid Fuzz Measurements")
+    juce_generate_juce_header(PyramidFuzzMeasurements)
+    target_sources(PyramidFuzzMeasurements PRIVATE tools/Measurements.cpp src/dsp/FuzzEngine.cpp)
+    target_include_directories(PyramidFuzzMeasurements PRIVATE src)
+    target_compile_definitions(PyramidFuzzMeasurements PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(PyramidFuzzMeasurements PRIVATE juce::juce_dsp juce::juce_audio_formats)
+
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME PyramidFuzzToneReferenceTests
+            COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s "${CMAKE_CURRENT_SOURCE_DIR}/tests" -p "test_*.py")
+        set_tests_properties(PyramidFuzzToneReferenceTests PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
+    endif()
 endif()

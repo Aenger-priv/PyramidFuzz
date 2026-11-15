@@ -13,7 +13,7 @@ retain those roles and their order.
 | Section | Schematic evidence | DSP implication |
 | --- | --- | --- |
 | Input | C1 10 uF, R1 2 MOhm, selectable R2 39 kOhm / R27 390 kOhm | Model the switch as source resistance and input attenuation/loading, rather than merely a fixed EQ crossfade. |
-| Q1 preamp | MPSA18, R13 10 kOhm collector, R22 1 kOhm emitter, R9 470 kOhm and C10 470 pF collector-to-base feedback | Use a gain stage with feedback-shaped bandwidth and modest headroom. |
+| Q4 preamp | MPSA18, R13 10 kOhm collector, R22 1 kOhm emitter, R9 470 kOhm and C10 470 pF collector-to-base feedback | Use a gain stage with feedback-shaped bandwidth and modest headroom. |
 | First fuzz gain stage | 2N5089, R18 10 kOhm, R21 100 Ohm, R17 470 kOhm, C12 470 pF, D3/D4 1N914 feedback clipper | Use band-limited feedback-style silicon clipping; this is the first dense sustain generator. |
 | Second fuzz gain stage | 2N5089, R15 470 kOhm, R10 100 Ohm, R16 100 kOhm, C11 470 pF; selectable D1/D2 silicon, D6/D7 germanium, or no diodes | Off must remove only this stage's diode feedback. Silicon and germanium need distinct thresholds and knees, but retain the same gain-stage filtering. |
 | Tone network | C9 0.01 uF, R5 470 kOhm, R25 Tone 250 kOhm, C8/R8 high-control branch | Implement a loaded, passive two-branch tone response; do not substitute a generic LP/HP blend plus a centre EQ scoop. |
@@ -30,12 +30,15 @@ retain those roles and their order.
 
 ## Consequence for the current DSP
 
-The current engine has the correct broad order and keeps its nonlinear stages
-oversampled, but its fixed filter curves and transfer functions are not yet
-derived from this schematic. In particular, `ToneStack` is an EQ approximation,
-and `InputVoicingStage` models Hi/Lo as an EQ morph rather than the documented
-39 kOhm / 390 kOhm input resistance. Therefore it should currently be described
-as a schematic-inspired fuzz, not a replica of this circuit.
+The current engine has the correct broad order and keeps its main nonlinear
+stages oversampled, but its fixed filter curves and transfer functions are not
+yet derived from this schematic. `ToneStack` now uses nodal analysis rather
+than generic EQ; however, the Step 1 reference check confirmed a wiring error
+in the R8/C8 branch. `InputVoicingStage` still uses fixed filters and a gain
+morph rather than derived 39 kOhm / 390 kOhm input loading. Sustain also changes
+gain inside all three nonlinear stages instead of acting as R24 after Q4.
+Therefore this remains a schematic-inspired fuzz. See [the baseline review](baseline-review.md)
+for independent reference wiring, explicit assumptions, and measured evidence.
 
 ## Implementation sequence
 
