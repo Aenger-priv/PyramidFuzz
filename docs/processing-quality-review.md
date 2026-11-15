@@ -93,9 +93,12 @@ limits. The approved circuit sound remains the reference, and the report keeps
 unmet stress targets visible. Further antialiasing methods would be a separate
 sonic/modeling revision, with another guitar review.
 
-## Next gate
+## Final delivery repeat
 
-Proceed with the authorized control-help, value formatting, meters and delivery
-work. Keep the CPU/alias exceptions explicit in quality help and final validation.
-The actual GarageBand session remains a separate host test, not implied by the
-processor harness or AU compilation.
+The fresh universal Release measurement executable repeated all 108 CPU and 72
+spectral cases under `artifacts/quality-step7-final-20261115/`. Default 48 kHz/4x
+worst p95 was 24.2% of deadline; worst overall p95/p99 were 91.4%/97.4%.
+The 90% all-settings target still fails. Spectral extrema remain those tabulated
+above, and the 4x stress target still fails. These benchmark results measure
+`FuzzEngine`, not the complete host/UI or native-bypass bookkeeping. The
+[delivery record](delivery-validation.md) records the separate actual host tests.

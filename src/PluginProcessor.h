@@ -30,6 +30,7 @@ public:
 
     bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override;
@@ -58,12 +59,17 @@ public:
 
 private:
     pyramidfuzz::dsp::FuzzParameters readParameters() const;
+    void processAudio(juce::AudioBuffer<float>&, juce::MidiBuffer&, bool bypassed);
 
     pyramidfuzz::dsp::FuzzEngine fuzzEngine;
     juce::AudioProcessorValueTreeState valueTreeState;
     int latencySamples { 0 };
     int preparedBlockSize { 1 };
     pyramidfuzz::dsp::PeakMeter inputMeter, outputMeter;
+    juce::AudioBuffer<float> dryRing, dryScratch;
+    juce::SmoothedValue<float> wetMix;
+    int dryPosition = 0;
+    bool hasProcessed = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PyramidFuzzAudioProcessor)
 };

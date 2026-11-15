@@ -155,6 +155,35 @@ int main(int argc,char** argv)
         }
     check(callbackAllocations==0,"processing/quality changes allocated C++ heap storage");
     check(peak<1 && worstStep<.4,"quality/control/variable-block safety bounds exceeded");
+    PyramidFuzzAudioProcessor independent;independent.prepareToPlay(48000,64);
+    juce::AudioBuffer<float> rightOnly(2,2048);rightOnly.clear();
+    for(int i=0;i<2048;++i)rightOnly.setSample(1,i,float(.2*std::sin(2*juce::MathConstants<double>::pi*1000*i/48000)));
+    independent.processBlock(rightOnly,midi);
+    check(rightOnly.getMagnitude(0,0,2048)<1e-8f && rightOnly.getMagnitude(1,0,2048)>.001f,"independent stereo input must not leak or duplicate channels");
+    // Native host bypass must preserve latency and mono-to-stereo expansion.
+    // It must also ignore Volume while keeping the processing state warm.
+    for(auto route:{std::pair<int,int>{1,1},{1,2},{2,2}})
+    {
+        PyramidFuzzAudioProcessor bypass;
+        bypass.setBusesLayout(layout(route.first,route.second));bypass.prepareToPlay(48000,32);
+        juce::AudioBuffer<float> block(route.second,512);signal(block,0,48000);
+        if(route.first==2)for(int i=0;i<512;++i)block.setSample(1,i,float(.13*std::sin(2*juce::MathConstants<double>::pi*337*i/48000)));
+        juce::AudioBuffer<float> original;original.makeCopyOf(block);
+        allocations=0;trackAllocations=true;bypass.processBlockBypassed(block,midi);trackAllocations=false;
+        check(allocations==0,"host bypass allocated C++ heap storage");
+        const int delay=bypass.getLatencySamples();double bypassError=0;
+        for(int ch=0;ch<route.second;++ch)for(int i=0;i<512;++i)
+            bypassError=std::max(bypassError,double(std::abs(block.getSample(ch,i)-(i<delay?0:original.getSample(ch,i-delay)))));
+        check(bypassError<1e-7,"host bypass latency or routing is incorrect");
+        double step=0;float previous=block.getSample(0,511);
+        for(int part=1;part<30;++part)
+        {
+            signal(block,part*512,48000);
+            if(part%6<3)bypass.processBlock(block,midi);else bypass.processBlockBypassed(block,midi);
+            for(int i=0;i<512;++i){const auto v=block.getSample(0,i);step=std::max(step,double(std::abs(v-previous)));previous=v;}
+        }
+        check(std::isfinite(step)&&step<.1,"host bypass transition exceeds safety step bound");
+    }
     // Check that chunking changes no signal samples for fixed settings.
     PyramidFuzzAudioProcessor a,b;a.prepareToPlay(48000,32);b.prepareToPlay(48000,512);
     juce::AudioBuffer<float> x(2,2048),y(2,2048);signal(x,0,48000);y.makeCopyOf(x);

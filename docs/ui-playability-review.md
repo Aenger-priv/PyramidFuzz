@@ -22,11 +22,11 @@ choice ordering and eight parameter IDs/ranges/defaults are preserved.
   0 dBFS. Values above unity remain visible numerically; no audio limiter is
   inserted. Input metering is before Input trim; output is after Volume.
 
-A separate custom effect-bypass parameter was considered and deferred. The
-existing host bypass remains the complete-effect comparison control. Adding a
-second bypass/state/control path was unnecessary to resolve the diode-Off
-ambiguity and would require its own aligned dry-path qualification. The
-standalone does not acquire an effect-bypass button in this step.
+A separate custom effect-bypass parameter was deferred. The existing host
+bypass remains the complete-effect comparison control. Final delivery adds a
+qualified six-sample dry path and a 5 ms transition to the native host callback;
+there is no new parameter or standalone bypass button. The wet circuit remains
+running during bypass, so bypass does not reduce its CPU use.
 
 The fixed 760×500 logical editor size is retained. Native display scaling is
 handled by JUCE; arbitrary window resizing is not advertised. The established
@@ -42,8 +42,16 @@ component previews were rendered at 1x and 2x and visually inspected:
 The overload preview shows the red Out indicator and the actual over-range dBFS
 value; the normal preview preserves the artwork and readable controls.
 
-Native standalone interaction checks are pending restart: the computer-use tool
-timed out with two standalone copies running, and the user was asked to close
-them. Keyboard/numeric/reset checks and GarageBand interaction must be recorded
-in the final delivery review after observing the running application. Component
-previews and unit tests alone do not establish those interaction results.
+Native standalone checks passed for arrow adjustment, typed percentage entry,
+double-click reset, diode selection/help, and 4x/8x/2x/4x switching. The captured
+guitar settings were restored and all eight values matched after closing and
+reopening. The actual Retina editor was visually inspected in standalone and AU.
+Shift-drag and the complete focus traversal were not separately exercised.
+
+GarageBand loaded the editor, accepted distinct control values, played/exported
+the synthetic test region, toggled native bypass, and recalled all eight values
+after the project was closed/reopened. Drawing/replaying an automation curve
+remains a manual host check: the control tool repeatedly misdirected clicks in
+the Tracks area. Processor automation tests and AU scheduled/ramped parameter
+validation pass, but do not replace this interaction check. See the
+[delivery record](delivery-validation.md) for the exact scope and retained files.

@@ -21,7 +21,7 @@ public:
     float processSample(int channel, float sample, float inputGain, float voicingBlend)
     {
         auto& state = states[static_cast<size_t>(channel)];
-        const auto input = std::isfinite(sample) ? clampAudio(sample * inputGain) : 0.0f;
+        const auto input = clampAudio(sample * inputGain);
         // Run both physical endpoint networks continuously for smooth switching.
         return lerp(state.hi.process(input), state.lo.process(input), voicingBlend);
     }

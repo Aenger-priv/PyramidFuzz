@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.22)
 
+# Keep the deployment floor explicit; SDK upgrades must not silently raise it.
+# Runtime validation is recorded separately from the build's compatibility floor.
+if(CMAKE_HOST_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum supported macOS build target" FORCE)
+endif()
+
 project(PyramidFuzz VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)

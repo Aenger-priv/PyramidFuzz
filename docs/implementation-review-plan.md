@@ -1,10 +1,12 @@
 # Implementation review and proposed revision plan
 
 Date: 2026-11-15. Reviewed baseline: `b98a3be` on `main`.
-Status: Steps 1–4 are implemented. Step 4 has live-guitar feedback: germanium
-sounds smoother/darker and mode differences are audible. The user authorized
-continuation through Steps 5–7. Step 5's processing checks pass, with documented
-CPU/alias stress exceptions; UI and final host validation are next.
+Status updated 2026-11-16: Steps 1–7 are implemented. Step 4 has live-guitar
+feedback: germanium sounds smoother/darker and mode differences are audible.
+Fresh universal builds, six automated test groups, AU validation, standalone
+interaction/recall, and GarageBand playback/bypass/export/session recall pass.
+The [delivery record](delivery-validation.md) retains the unmet CPU/alias stress
+targets and remaining manual automation/final guitar acceptance checks.
 
 ## Direction
 
@@ -217,9 +219,9 @@ and approval of the resulting sound and interface.
 
 ## Current review gate
 
-The user tested Step 4 with guitar and heard smoother/darker germanium and
-clear mode differences. Steps 5–7 are now authorized together. The
-[processing/quality review](processing-quality-review.md) records passing
-processor/circuit checks and CPU improvements, plus unmet extreme CPU/alias
-targets. Continue UI/UX and final validation while retaining these limitations.
-No real DI or physical-pedal reference has been captured.
+Implementation and local build delivery are complete; final acceptance is
+qualified. The [processing/quality review](processing-quality-review.md) records
+CPU improvements and unmet extreme CPU/alias targets. The
+[delivery record](delivery-validation.md) records actual host checks. A manually
+drawn GarageBand automation curve and a final guitar pass on the delivered build
+remain unverified. No real DI or physical-pedal reference has been captured.

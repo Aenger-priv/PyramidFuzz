@@ -19,12 +19,17 @@ void PyramidFuzzAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     latencySamples = fuzzEngine.getLatencySamples();
     setLatencySamples(latencySamples);
     inputMeter.prepare(sampleRate); outputMeter.prepare(sampleRate);
+    dryRing.setSize(channels,latencySamples+1); dryRing.clear();
+    dryScratch.setSize(channels,preparedBlockSize); dryScratch.clear();
+    dryPosition=0; hasProcessed=false;
+    wetMix.reset(sampleRate,.005); wetMix.setCurrentAndTargetValue(1);
 }
 
 void PyramidFuzzAudioProcessor::releaseResources()
 {
     fuzzEngine.reset();
     inputMeter.reset(); outputMeter.reset();
+    dryRing.clear(); dryScratch.clear(); dryPosition=0; hasProcessed=false;
 }
 
 bool PyramidFuzzAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -49,6 +54,16 @@ bool PyramidFuzzAudioProcessor::isBusesLayoutSupported(const BusesLayout& layout
 
 void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    processAudio(buffer,midiMessages,false);
+}
+
+void PyramidFuzzAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
+{
+    processAudio(buffer,midiMessages,true);
+}
+
+void PyramidFuzzAudioProcessor::processAudio(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, bool bypassed)
+{
     juce::ScopedNoDenormals noDenormals;
     juce::ignoreUnused(midiMessages);
 
@@ -56,6 +71,8 @@ void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
     const auto numOutputChannels = getTotalNumOutputChannels();
     const auto numSamples = buffer.getNumSamples();
     if (numSamples == 0) return;
+    if (!hasProcessed) { wetMix.setCurrentAndTargetValue(bypassed?0.0f:1.0f); hasProcessed=true; }
+    wetMix.setTargetValue(bypassed?0.0f:1.0f);
     float inputPeak = 0.0f;
 
     for (auto channel = 0; channel < numInputChannels; ++channel)
@@ -71,7 +88,32 @@ void PyramidFuzzAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
     {
         const auto length = juce::jmin(preparedBlockSize, numSamples - offset);
         juce::AudioBuffer<float> chunk(buffer.getArrayOfWritePointers(), numInputChannels, offset, length);
+        // Keep an aligned dry history even while wet. No resize/allocation here.
+        const int ringSize=dryRing.getNumSamples();
+        for(int i=0;i<length;++i)
+        {
+            const int read=(dryPosition+ringSize-latencySamples)%ringSize;
+            for(int ch=0;ch<numInputChannels;++ch)
+            {
+                auto* ring=dryRing.getWritePointer(ch);
+                const float raw=chunk.getSample(ch,i);
+                ring[dryPosition]=std::isfinite(raw)?raw:0.0f;
+                dryScratch.setSample(ch,i,ring[read]);
+            }
+            dryPosition=(dryPosition+1)%ringSize;
+        }
+        // Keep wet state warm through host bypass, including quality changes.
         fuzzEngine.processBlock(chunk);
+        for(int i=0;i<length;++i)
+        {
+            const float mix=wetMix.getNextValue();
+            if(mix>=1.0f) continue; // Preserve active-path samples exactly.
+            for(int ch=0;ch<numInputChannels;++ch)
+            {
+                const float dry=dryScratch.getSample(ch,i), wet=chunk.getSample(ch,i);
+                chunk.setSample(ch,i,mix<=0.0f?dry:dry+mix*(wet-dry));
+            }
+        }
     }
 
     // A mono input needs one circuit path; expand the processed result afterward.

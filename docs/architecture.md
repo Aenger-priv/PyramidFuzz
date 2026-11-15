@@ -47,8 +47,8 @@ is linear and does not clamp over-range output.
 | `OversamplingEngine` | JUCE oversamplers, quality selection and integer-latency compensation. |
 | `FuzzEngine` / `NonlinearPath` | Prepared buffers and three rate-specific paths, smoothing, per-channel processing and quality fade. |
 
-`HighControlFilter` remains a reusable unused contour block. The main path's
-High control operates R8 directly in `ToneStack`.
+High operates R8 directly in `ToneStack`. The unused legacy contour block and
+its unreferenced biquad/transfer helpers were removed during final cleanup.
 
 ## Circuit conventions and remaining approximations
 
@@ -96,6 +96,14 @@ with the six-sample delay of 4x/8x. Mono-to-stereo runs one circuit path before
 output duplication. State loading validates the complete eight-parameter tree
 before replacing it; the processor advertises a conservative ten-second tail.
 
+Native host bypass uses a preallocated six-sample dry delay, preserving the
+reported latency and mono-to-stereo expansion. A 5 ms linear wet/dry transition
+smooths toggles; an initially bypassed instance starts dry immediately. The wet
+engine keeps running so its filters and quality state stay warm. This bypass
+does not save DSP CPU, and adds no APVTS parameter. Tests cover all three bus
+layouts, independent stereo channels, exact dry delay and allocation-free
+callbacks. Hosts that suspend an instance can still interrupt its processing.
+
 The diode evaluator and warm solve preserve the declared law with fewer
 transcendental evaluations. Processor tests cover routing/state/chunking and
 measure zero C++ heap allocations during the exercised quality changes. See the
@@ -123,8 +131,9 @@ Large captures, archives, figures and listening WAVs are ignored under
 - [Step 3](input-sustain-review.md): input loading, fixed preamp and Sustain placement.
 - [Step 4](clipping-recovery-review.md): feedback clipping, coupling and recovery.
 
-The user has auditioned Step 4 and authorized the remaining work. UI and host
-validation continue in the [implementation plan](implementation-review-plan.md).
+Steps 5–7 are implemented. The [delivery record](delivery-validation.md) separates
+passing automated/native checks from remaining manual acceptance and the known
+CPU/alias stress exceptions.
 
 ## Control presentation and meters
 
