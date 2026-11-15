@@ -62,5 +62,6 @@ The [Step 3 input/Sustain revision](docs/input-sustain-review.md) derives input 
 - `src/dsp/`: fuzz stages, tone network, and oversampling.
 - `tests/`: offline DSP checks.
 - `tools/`: offline measurements, independent circuit reference, and plotting.
+- `assets/generated/pyramid-fuzz-icon.png`: app icon; CMake/JUCE packages it as the macOS bundle icon. Its generation prompt is stored in the adjacent JSON file.
 - [docs/architecture.md](docs/architecture.md): signal path and implementation details.
 - [docs/schematic-analysis.md](docs/schematic-analysis.md): notes on the source schematic.

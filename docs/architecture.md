@@ -16,6 +16,15 @@ The repository is now set up as a JUCE audio plugin shell with a first-pass fuzz
   - Owns control widgets and parameter attachments
   - Presents the minimum stompbox-style UI shell for the core controls
 
+## App icon
+
+`assets/generated/pyramid-fuzz-icon.png` is the source artwork for the macOS
+application icon. It uses a simplified black/gold pyramid-and-eye motif derived
+from the pedal panel's visual identity. `ICON_BIG` in `juce_add_plugin` lets JUCE
+generate `Icon.icns`, add it to bundle resources, and set the bundle's icon entry.
+The adjacent JSON records the built-in image-generation prompt and style reference.
+Icon generation is not part of the build and requires no network access to rebuild.
+
 ## DSP blocks
 
 DSP is organized under `src/dsp/` as discrete blocks:

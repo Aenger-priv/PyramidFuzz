@@ -33,6 +33,7 @@ juce_add_plugin(PyramidFuzz
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "Pyramid Fuzz needs microphone access to capture guitar or line input in the standalone app."
     PRODUCT_NAME "Pyramid Fuzz"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/generated/pyramid-fuzz-icon.png"
 )
 
 juce_generate_juce_header(PyramidFuzz)
