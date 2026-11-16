@@ -1,0 +1,41 @@
+flowchart TB
+    accTitle: Pyramid Fuzz component architecture
+    accDescr: Host and editor interact with a processor instance that owns parameter state, metering, bypass buffers and the DSP engine. The engine owns prepared oversamplers and three circuit paths. Offline verification is outside the runtime plugin.
+
+    HOST["Host / audio wrapper<br/>GarageBand or Logic: AU<br/>JUCE wrapper: standalone"]
+    UI["PluginEditor<br/>Controls, artwork and<br/>APVTS attachments"]
+
+    subgraph INSTANCE["PYRAMID FUZZ — PROCESSOR INSTANCE"]
+        PROC["PluginProcessor<br/>Audio callbacks, buses,<br/>lifecycle and state validation"]
+        STATE["APVTS parameter state<br/>Eight parameters<br/>Host automation / session recall"]
+        METERS["PeakMeter × 2<br/>Audio-owned envelopes<br/>Atomic UI snapshots"]
+        BYPASS["Native host bypass<br/>Prepared dry delay + scratch<br/>5 ms wet/dry blend"]
+
+        subgraph DSP["DSP ENGINE — NO UI DEPENDENCY"]
+            ENGINE["FuzzEngine<br/>Parameter smoothing<br/>Quality transitions and gain"]
+            OS["OversamplingEngine<br/>Prepared 2x / 4x / 8x samplers<br/>Fixed six-sample latency"]
+            PATHS["NonlinearPath × 3<br/>One prepared path per quality<br/>Only the selected path runs"]
+        end
+    end
+
+    VERIFY["Offline verification<br/>DSP / processor tests<br/>Measurement tools + Python references"]
+
+    HOST -->|audio / lifecycle / session callbacks| PROC
+    UI -.->|bidirectional parameter attachments| STATE
+    PROC -.->|atomic reads / validated session state| STATE
+    PROC -->|process prepared chunks| ENGINE
+    PROC -->|capture dry / mix wet| BYPASS
+    PROC -->|publish block peaks| METERS
+    UI -.->|poll snapshots at 30 Hz| METERS
+    ENGINE -->|upsample / downsample| OS
+    ENGINE -->|invoke selected circuit| PATHS
+    VERIFY -.->|exercise production code| ENGINE
+
+    classDef boundary fill:#edf2f8,stroke:#536880,color:#182b43;
+    classDef control fill:#eaf5f1,stroke:#397c68,color:#173d33;
+    classDef audio fill:#fff5dc,stroke:#a47b2b,color:#493612;
+    class HOST,UI,VERIFY boundary;
+    class STATE,METERS control;
+    class PROC,BYPASS,ENGINE,OS,PATHS audio;
+    style INSTANCE fill:#fcfcfd,stroke:#aab6c4
+    style DSP fill:#fffaf0,stroke:#c8ac70

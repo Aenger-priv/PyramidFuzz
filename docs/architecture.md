@@ -1,5 +1,9 @@
 # Architecture
 
+The [architecture diagrams](diagrams/README.md) show the component relationships,
+DSP signal path and audio-callback sequence, with editable Mermaid sources and
+rendered SVGs.
+
 ## Plugin and parameters
 
 `PyramidFuzzAudioProcessor` owns the lifecycle, buses and

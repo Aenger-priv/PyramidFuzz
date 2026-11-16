@@ -57,6 +57,7 @@ Six test groups cover DSP behavior, processor state/routing/chunking, meter timi
 Existing sessions retain parameter values and use the revised sound. Earlier builds are preserved separately; no legacy sound model is embedded.
 
 - [Revision plan](docs/implementation-review-plan.md)
+- [Architecture diagrams](docs/diagrams/README.md): components, DSP signal flow and audio-callback sequence.
 - [Original baseline](docs/baseline-review.md), [tone](docs/tone-correction-review.md), [input/Sustain](docs/input-sustain-review.md), [clipping/recovery](docs/clipping-recovery-review.md)
 - [Processing/quality](docs/processing-quality-review.md), [UI/playability](docs/ui-playability-review.md), [delivery validation](docs/delivery-validation.md)
 
