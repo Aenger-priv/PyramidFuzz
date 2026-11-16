@@ -4,8 +4,10 @@ Validated 2026-11-15/16 on Apple Silicon, macOS 27.2.1 (26B131), GarageBand
 10.4.14, Xcode 27.2 (27B52), Apple clang 21 and SDK 27.2. JUCE remains at
 `501c07674e1ad693085a7e7c398f205c2677f5da`; its checkout is clean.
 
-The implementation is delivered locally. Final acceptance remains qualified by
-the manual checks and stress exceptions below. Nothing was pushed remotely.
+This record captures the local validation before publication. The implementation
+and diagrams were subsequently merged into `main`; see the
+[beta installation guide](installation.md) for prebuilt distribution. Final
+acceptance remains qualified by the manual checks and stress exceptions below.
 
 ## Delivered changes
 

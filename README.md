@@ -2,6 +2,15 @@
 
 A JUCE guitar fuzz for macOS/GarageBand, inspired by a modified Ram's Head Big Muff. Builds as an Audio Unit and a standalone app. The signal path uses nominal circuit-guided gain, diode feedback and passive tone models, with oversampling. It is not a measured-pedal calibration or full transistor simulation.
 
+## Download
+
+[Download v0.1.0-beta.1](https://github.com/Aenger-priv/PyramidFuzz/releases/tag/v0.1.0-beta.1) — prebuilt macOS downloads, no build tools required:
+
+- [Audio Unit for Logic / GarageBand](https://github.com/Aenger-priv/PyramidFuzz/releases/download/v0.1.0-beta.1/Pyramid-Fuzz-v0.1.0-beta.1-macOS-Universal-AU.zip)
+- [Standalone app](https://github.com/Aenger-priv/PyramidFuzz/releases/download/v0.1.0-beta.1/Pyramid-Fuzz-v0.1.0-beta.1-macOS-Universal-Standalone.zip)
+
+Both include Apple Silicon and Intel code. This beta is ad-hoc signed and not notarized; macOS may block downloaded copies. See [installation, compatibility and test limits](docs/installation.md).
+
 ## Controls
 
 - **Input:** input trim in dB.

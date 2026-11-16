@@ -158,3 +158,10 @@ before trim and output after Volume. They do not affect audio. See the
 artwork. Its adjacent JSON records the generation prompt and style reference.
 CMake's `ICON_BIG` lets JUCE package `Icon.icns` and the bundle icon entry.
 Rebuilding requires no image-generation service or network access.
+
+## Prebuilt distribution
+
+Versioned AU and standalone ZIPs are distributed as GitHub Release assets;
+`build/` and `artifacts/` remain outside Git. See the
+[beta installation guide](installation.md) for host setup, signing status and
+the distinction between build targets and tested runtime compatibility.
