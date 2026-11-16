@@ -1,0 +1,14 @@
+{
+  "tool": "built-in image_gen",
+  "use_case": "logo-brand",
+  "style_reference": "assets/generated/pyramid-fuzz-panel.png",
+  "output_file": "assets/generated/pyramid-fuzz-icon.png",
+  "transparent_background": true,
+  "prompt": "Use case: logo-brand\nAsset type: final macOS application icon for \"Pyramid Fuzz\", a boutique guitar fuzz audio app.\nInput image: the supplied pedal panel is a STYLE AND PALETTE REFERENCE ONLY. Create a new icon, not a crop or a mockup.\nPrimary request: a polished, distinctive, immediately recognizable app icon that belongs to this existing black-and-antique-gold Egyptian pedal identity.\nComposition: one large bold gold pyramid / triangular relief emblem with a single stylized eye inset near its upper center. A few short broad sun rays above the apex may echo the reference. Center the emblem on a deep obsidian rounded-square tile with a restrained antique-gold inner rim. The pyramid must fill most of the tile and read clearly at 32 pixels; keep its silhouette and the eye bold. Strong negative space, limited details.\nStyle: sophisticated engraved metal / enamel badge, premium illustrated boutique audio hardware; subtle gold bevels and matte black texture, decisive thick shapes, warm gold and faint copper shading. Refined and ominous rather than cartoonish. Depth without visual clutter.\nOutput: single square 1024x1024 icon, tile centered with roughly 7 percent breathing space around it, rounded corners and truly transparent pixels outside the tile. Front-on artwork, not a photographed object; no perspective or ground shadow.\nConstraints: no words, letters, numbers, watermark, surrounding scene, app-window mockup, headphones, guitar, tiny hieroglyphs, filigree, detailed desert landscape, or additional badges. Do not include the reference image's border ornaments or sphinx. Preserve the reference's black/gold identity while simplifying it heavily for a small application icon.",
+  "source_dimensions": [
+    1254,
+    1254
+  ],
+  "source_sha256": "67249c6c114ff131410be2306e37cd966979c8c9daf48e1026ba3ed65949defd",
+  "build_packaging": "JUCE ICON_BIG generates 1024px and 512px Icon.icns entries"
+}

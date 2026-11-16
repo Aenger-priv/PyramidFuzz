@@ -1,0 +1,42 @@
+{
+  "description": "Reduced nominal 9 V amplifier with resistor/capacitor feedback and a series capacitor/diode branch. Explicit curve assumptions, not measured device fits.",
+  "supply": 9.0,
+  "collector": 10000.0,
+  "base_bias": 100000.0,
+  "feedback": 470000.0,
+  "feedback_cap": 4.7e-10,
+  "diode_cap": 4.7e-08,
+  "emitter": 100.0,
+  "beta": 600.0,
+  "vbe": 0.65,
+  "thermal_voltage": 0.02585,
+  "saturation_voltage": 0.2,
+  "junctions": {
+    "1N914-like": {
+      "Is": 2.52e-09,
+      "N": 1.752,
+      "R": 2.0
+    },
+    "1N4001-like": {
+      "Is": 1.4e-08,
+      "N": 1.984,
+      "R": 0.05
+    },
+    "1N34A-like": {
+      "Is": 2e-07,
+      "N": 1.35,
+      "R": 40.0
+    }
+  },
+  "ge_counts_base_to_collector_and_reverse": [
+    1,
+    2
+  ],
+  "off": "Open the diode/coupling-capacitor branch; retain Rf/Cf and amplifier.",
+  "sources": [
+    "https://www.vishay.com/docs/85622/1n914.pdf",
+    "https://www.vishay.com/docs/88503/1n4001.pdf",
+    "https://my.centralsemi.com/datasheets/1N34A.PDF"
+  ],
+  "polarity_coordinates": "Positive-gain engine: Q3 base coordinates are reversed after Q4; swap Q3 headroom limits. Q2 base coordinates agree with physical polarity; retain Ge one/two directions."
+}

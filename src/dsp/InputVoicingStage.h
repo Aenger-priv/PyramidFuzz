@@ -1,68 +1,45 @@
 #pragma once
 
-#include "DspUtilities.h"
+#include "InputCircuit.h"
 
 namespace pyramidfuzz::dsp
 {
 class InputVoicingStage
 {
 public:
-    void prepare(double newSampleRate, int, int channels)
+    void prepare(double rate, int, int channels)
     {
-        sampleRate = newSampleRate;
-        hiHighPass.resize(static_cast<size_t>(channels));
-        hiLowPass.resize(static_cast<size_t>(channels));
-        loHighPass.resize(static_cast<size_t>(channels));
-        loLowPass.resize(static_cast<size_t>(channels));
-
-        for (auto channel = 0; channel < channels; ++channel)
+        states.resize(static_cast<size_t>(channels));
+        for (auto& state : states)
         {
-            // C1 is 10 uF. The 39 k / 390 k input-resistor selection changes
-            // the effective input loading as well as the coupling corner.
-            hiHighPass[static_cast<size_t>(channel)].setCoefficients(makeHighPass(sampleRate, 120.0f, 0.69f));
-            hiLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 5600.0f, 0.78f));
-            loHighPass[static_cast<size_t>(channel)].setCoefficients(makeHighPass(sampleRate, 48.0f, 0.66f));
-            loLowPass[static_cast<size_t>(channel)].setCoefficients(makeLowPass(sampleRate, 5000.0f, 0.80f));
+            prepareFilter(state.hi, rate, inputcircuit::hiResistance);
+            prepareFilter(state.lo, rate, inputcircuit::loResistance);
         }
-
         reset();
     }
-
-    void reset()
-    {
-        for (auto& filter : hiHighPass)
-            filter.reset();
-
-        for (auto& filter : hiLowPass)
-            filter.reset();
-
-        for (auto& filter : loHighPass)
-            filter.reset();
-
-        for (auto& filter : loLowPass)
-            filter.reset();
-    }
-
+    void reset() { for (auto& state : states) { state.hi.reset(); state.lo.reset(); } }
     float processSample(int channel, float sample, float inputGain, float voicingBlend)
     {
-        auto hi = hiLowPass[static_cast<size_t>(channel)].process(hiHighPass[static_cast<size_t>(channel)].process(sample));
-        auto lo = loLowPass[static_cast<size_t>(channel)].process(loHighPass[static_cast<size_t>(channel)].process(sample));
-
-        // The 390 k path preserves more bass after C1 but attenuates the
-        // transistor input more than the 39 k path. Keep that level difference
-        // audible; the Input control is available to compensate it.
-        hi *= 0.94f;
-        lo *= 0.67f;
-
-        const auto voiced = lerp(hi, lo, voicingBlend);
-        return clampAudio(voiced * inputGain);
+        auto& state = states[static_cast<size_t>(channel)];
+        const auto input = clampAudio(sample * inputGain);
+        // Run both physical endpoint networks continuously for smooth switching.
+        return lerp(state.hi.process(input), state.lo.process(input), voicingBlend);
     }
-
 private:
-    double sampleRate { 44100.0 };
-    std::vector<Biquad> hiHighPass;
-    std::vector<Biquad> hiLowPass;
-    std::vector<Biquad> loHighPass;
-    std::vector<Biquad> loLowPass;
+    static void prepareFilter(inputcircuit::CircuitFilter& filter, double rate, double resistance)
+    {
+        using namespace inputcircuit;
+        const auto q4 = preamp();
+        const double gc = 1.0 / collectorResistance, gf = 1.0 / feedbackResistance;
+        const double sum = q4.baseConductance + gc + q4.effectiveTransconductance;
+        const double d0 = q4.baseConductance * gc + gf * sum;
+        const double d1 = inputCapacitance * (gc + gf) + d0 * inputCapacitance * resistance + feedbackCapacitance * sum;
+        const double d2 = inputCapacitance * feedbackCapacitance * (1.0 + resistance * sum);
+        // Q4 base voltage includes feedback-dependent input loading. PreGainStage
+        // applies the collector/base transfer at the same oversampled rate.
+        filter.setAnalog(rate, 0, inputCapacitance * (gc + gf), inputCapacitance * feedbackCapacitance, d0, d1, d2);
+    }
+    struct State { inputcircuit::CircuitFilter hi, lo; };
+    std::vector<State> states;
 };
-} // namespace pyramidfuzz::dsp
+}

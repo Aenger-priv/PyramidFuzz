@@ -1,59 +1,71 @@
 # Pyramid Fuzz
 
-Pyramid Fuzz is a JUCE guitar fuzz for macOS, inspired by a modified Ram's Head Big Muff circuit. It builds as an Audio Unit for hosts such as GarageBand and as a standalone app. The DSP uses schematic-guided gain and clipping stages and a passive tone-network model; it is not a full transistor-level simulation.
+A JUCE guitar fuzz for macOS/GarageBand, inspired by a modified Ram's Head Big Muff. Builds as an Audio Unit and a standalone app. The signal path uses nominal circuit-guided gain, diode feedback and passive tone models, with oversampling. It is not a measured-pedal calibration or full transistor simulation.
 
 ## Controls
 
-- **Input** adjusts the signal level entering the fuzz.
-- **Sustain** adjusts the gain and compression of the fuzz stages.
-- **Tone** sweeps the passive tone network from darker to brighter; **High** adjusts its high-frequency branch.
-- **Volume** sets the output level.
-- **Voicing** selects the tighter Hi input or the fuller, lower-drive Lo input.
-- **Clipping** selects Off, Silicon, or Germanium for the second clipping stage. Off retains the gain stage with a more open response.
-- **Oversampling** selects 2x, 4x, or 8x processing of the nonlinear stages. The default is 4x. Changing it briefly fades the signal while the processing is reset.
+- **Input:** input trim in dB.
+- **Sustain:** loaded interstage drive, on a 0–10 scale.
+- **Tone:** dark to bright; displayed as a percentage.
+- **High:** extends the passive tone network's upper response; interacts with Tone.
+- **Volume:** output level in dB.
+- **Voicing:** Hi gives more drive; Lo is cleaner and quieter.
+- **Diode clipping:** Off opens only the second diode branch; the amplifier and first clipping stage remain active. Silicon is firmer; germanium uses asymmetric one/two-junction branches and clips lower. Natural level differences are preserved.
+- **Oversampling:** 2x / 4x / 8x. Default 4x. Changes briefly fade the signal; host latency remains six samples.
 
-The editor also displays input and output levels. The plugin supports mono and stereo input/output, including mono input to stereo output.
+Double-click a knob to reset, Shift-drag for fine adjustment, or click its value to type. Tab/arrows operate focused controls. Meters show peak dBFS with timed decay and a one-second overload hold. Input is metered before trim; output after Volume. Use the host bypass for the complete effect.
 
-## Build and run on macOS
+Use 4x for normal playing. Try 8x for exposed bright/high-drive sounds when CPU allows. The extreme 96 kHz/8x/stereo/32-frame combination remains CPU-heavy. Synthetic stress tests also retain measurable alias energy at 4x; see the [quality review](docs/processing-quality-review.md) for the actual results and limits.
 
-Install Xcode and CMake 3.22 or newer. Clone the repository with its JUCE submodule, or initialize it in an existing checkout:
+## Build and run
+
+Requires Xcode, CMake 3.22+, and the pinned JUCE submodule:
 
 ```bash
 git submodule update --init --recursive
+cmake -S . -B build -G Xcode
+cmake --build build --config Release --target PyramidFuzz_Standalone PyramidFuzz_AU
+open "build/PyramidFuzz_artefacts/Release/Standalone/Pyramid Fuzz.app"
 ```
 
-From the project directory, configure and build the standalone app and Audio Unit:
+Quit an existing standalone copy before reopening a rebuilt app. Release is recommended for playing; Debug remains available for development.
+
+The AU is `build/PyramidFuzz_artefacts/Release/AU/Pyramid Fuzz.component`. Builds do not install it automatically. To use it in GarageBand, copy it to `~/Library/Audio/Plug-Ins/Components`, restart the host, then validate registration with:
 
 ```bash
-cmake -S . -B build -G Xcode -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --config Debug --target PyramidFuzz_Standalone PyramidFuzz_AU
+auval -v aufx PhFz AnDr
 ```
 
-Launch the standalone app:
+The deployment floor is explicitly macOS 12.0. A universal build can be generated separately:
 
 ```bash
-open "build/PyramidFuzz_artefacts/Debug/Standalone/Pyramid Fuzz.app"
+cmake -S . -B build/validated-release -G Xcode "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+cmake --build build/validated-release --config Release --target PyramidFuzz_Standalone PyramidFuzz_AU
 ```
 
-The Audio Unit is built at `build/PyramidFuzz_artefacts/Debug/AU/Pyramid Fuzz.component`. The build does not install it automatically. To use it in GarageBand, copy the component to `~/Library/Audio/Plug-Ins/Components`, then restart GarageBand if needed. `auval -a` lists registered Audio Units.
+Build compatibility and runtime validation are separate: see the delivery review for tested OS/architecture/host results. An installed JUCE CMake package is also supported when the submodule is absent, via `CMAKE_PREFIX_PATH`.
 
-The build also supports an installed JUCE CMake package when the `JUCE/` submodule is absent; point `CMAKE_PREFIX_PATH` at the package's installation prefix.
-
-## Tests
-
-CMake testing is enabled by default. Build and run the offline DSP checks with:
+## Tests and evidence
 
 ```bash
-cmake --build build --config Debug --target PyramidFuzzDspTests
-ctest --test-dir build -C Debug --output-on-failure
+cmake --build build --config Release --target PyramidFuzzDspTests PyramidFuzzProcessorTests PyramidFuzzMeasurements
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-The checks cover clipping-knee continuity, finite output, stereo consistency, and signal flow at 44.1, 48, and 96 kHz across the clipping and oversampling modes. Listening against a reference pedal and validation in GarageBand remain useful steps for assessing sound and host behavior.
+Six test groups cover DSP behavior, processor state/routing/chunking, meter timing and value formats, independent circuit references, tone/input responses and clipping feedback. Optional measurement tools capture stage levels, harmonics, decay, synthetic/DI audio, CPU and alias estimates. Large captures and original builds stay local under ignored `artifacts/`.
 
-## Project layout
+Existing sessions retain parameter values and use the revised sound. Earlier builds are preserved separately; no legacy sound model is embedded.
 
-- `src/PluginProcessor.*` and `src/PluginEditor.*`: plugin integration, parameters, and interface.
-- `src/dsp/`: fuzz stages, tone network, and oversampling.
-- `tests/`: offline DSP checks.
-- [docs/architecture.md](docs/architecture.md): signal path and implementation details.
-- [docs/schematic-analysis.md](docs/schematic-analysis.md): notes on the source schematic.
+- [Revision plan](docs/implementation-review-plan.md)
+- [Architecture diagrams](docs/diagrams/README.md): components, DSP signal flow and audio-callback sequence.
+- [Original baseline](docs/baseline-review.md), [tone](docs/tone-correction-review.md), [input/Sustain](docs/input-sustain-review.md), [clipping/recovery](docs/clipping-recovery-review.md)
+- [Processing/quality](docs/processing-quality-review.md), [UI/playability](docs/ui-playability-review.md), [delivery validation](docs/delivery-validation.md)
+
+## Layout
+
+- `src/PluginProcessor.*`: host integration and parameters; `src/PluginEditor.*`: controls and artwork.
+- `src/dsp/`: circuit blocks, quality paths, smoothing and meters.
+- `tests/`, `tools/`: regression tests, independent references, captures and plots.
+- `assets/generated/`: panel, knobs and app icon, with generation metadata. Normal builds use these local assets and need no generation service.
+- `scripts/generate_pedal_art.py`: optional artwork helper; its default prompt is retained under `assets/prompts/`. It is outside the normal build.
+- [Architecture](docs/architecture.md) and [schematic mapping](docs/schematic-analysis.md).

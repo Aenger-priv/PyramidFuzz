@@ -36,7 +36,7 @@ private:
     using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
 
-    void drawMeter(juce::Graphics& g, juce::Rectangle<float> bounds, float level, const juce::String& label);
+    void drawMeter(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool overload, const juce::String& label);
     void drawBackgroundPanel(juce::Graphics& g, juce::Rectangle<int> pedalBounds);
     void configureSlider(juce::Slider& slider, const juce::String& name);
     void configureComboBox(juce::ComboBox& comboBox, const juce::String& name);
@@ -45,6 +45,8 @@ private:
     PyramidFuzzAudioProcessor& audioProcessor;
     ImageKnobLookAndFeel imageKnobLookAndFeel;
     juce::Image panelArtwork;
+    juce::TooltipWindow tooltips;
+    juce::Label modeHelp, gestureHelp, keyboardHelp;
 
     juce::Label titleLabel;
     juce::Label inputLabel;
@@ -78,6 +80,7 @@ private:
 
     float inputMeterDisplay { 0.0f };
     float outputMeterDisplay { 0.0f };
+    bool inputOverload = false, outputOverload = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PyramidFuzzAudioProcessorEditor)
 };

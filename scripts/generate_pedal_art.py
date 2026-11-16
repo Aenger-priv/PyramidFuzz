@@ -23,7 +23,10 @@ def load_prompt(prompt_arg: str | None) -> str:
     else:
         prompt_path = DEFAULT_PROMPT_FILE
 
-    return prompt_path.read_text(encoding="utf-8").strip()
+    prompt = prompt_path.read_text(encoding="utf-8").strip()
+    if not prompt:
+        raise ValueError(f"Prompt file is empty: {prompt_path}")
+    return prompt
 
 
 def build_request(prompt: str, size: str, background: str, moderation: str) -> bytes:
@@ -89,7 +92,11 @@ def main() -> int:
         print("OPENAI_API_KEY is not set.", file=sys.stderr)
         return 1
 
-    prompt = load_prompt(args.prompt_file)
+    try:
+        prompt = load_prompt(args.prompt_file)
+    except (OSError, ValueError) as exc:
+        print(f"Cannot load artwork prompt: {exc}", file=sys.stderr)
+        return 1
     output_path = Path(args.output).expanduser().resolve()
     metadata_path = Path(args.metadata).expanduser().resolve()
 

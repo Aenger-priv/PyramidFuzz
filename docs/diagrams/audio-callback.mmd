@@ -1,0 +1,49 @@
+sequenceDiagram
+    accTitle: Pyramid Fuzz audio callback sequence
+    accDescr: Preparation allocates all quality paths and buffers before playback. Each non-empty callback samples parameter atomics once, updates the engine, and processes bounded chunks. Each chunk captures delayed dry audio, runs the selected oversampled wet circuit and applies bypass blending. Mono duplication and atomic peak publication occur before returning audio. UI meter polling is independent.
+    participant H as Host / JUCE wrapper
+    participant P as PluginProcessor
+    participant A as APVTS
+    participant E as FuzzEngine
+    participant O as OversamplingEngine
+    participant N as Selected NonlinearPath
+
+    Note over H,N: Before playback: prepare all samplers, paths and buffers / initialize state / report six-sample latency
+    Note over H,N: Audio thread — one non-empty host callback
+    H->>P: processBlock() or processBlockBypassed()
+    activate P
+    P->>P: Input peak / clear extra outputs
+    P->>A: readParameters() — atomic loads
+    A-->>P: Eight current parameter values
+    P->>E: updateParameters(snapshot)
+    Note over E,O: Smoothing targets and quality handover at this callback boundary
+
+    loop Each chunk ≤ prepared block size
+        P->>P: Capture sanitized dry audio, delayed six samples
+        P->>E: processBlock(chunk) — even during host bypass
+        activate E
+        E->>E: Advance host-rate control smoothers
+        E->>O: processBlock(chunk, circuit callback)
+        activate O
+        O->>O: Filtered upsampling
+        O->>E: Invoke circuit callback
+        loop Each oversampled sample and input channel
+            E->>N: process(channel, sample, controls)
+            N-->>E: Wet circuit sample
+        end
+        Note over E,N: Hold each host-rate control value across its oversampled sample group
+        E-->>O: Circuit callback returns
+        O->>O: Downsample + latency padding
+        O-->>E: Host-rate wet audio
+        deactivate O
+        E->>E: 1/3 scale × Volume × quality fade
+        E-->>P: Wet chunk
+        deactivate E
+        P->>P: Aligned dry/wet blend, 5 ms bypass ramp
+    end
+
+    P->>P: Mono duplication / output peak
+    P->>P: Publish PeakMeter atomics
+    P-->>H: Processed audio buffer
+    deactivate P
+    Note over H,N: Editor polls meters at 30 Hz independently — no UI calls in this callback

@@ -1,0 +1,37 @@
+flowchart TB
+    accTitle: Pyramid Fuzz DSP signal flow
+    accDescr: Input audio splits into a six-sample delayed dry path and an oversampled wet circuit. The wet circuit contains input voicing, Q4 preamp, loaded Sustain and Q3 clipping, Q2 coupling and selectable diode clipping, passive Tone and High, and Q1 recovery. After downsampling, latency padding, scale, Volume and quality fade, native host bypass blends wet and dry. Mono expansion and output metering follow.
+
+    INPUT["Host input audio<br/>Mono or stereo · host sample rate"]
+    INM["Measure input peak<br/>Before Input trim"]
+    DRY["Dry branch<br/>Sanitize non-finite samples<br/>Delay six host samples"]
+    UP["Filtered upsampling<br/>2x / 4x / 8x · default 4x"]
+
+    subgraph CIRCUIT["SELECTED NONLINEARPATH — RUNS AT 2x / 4x / 8x HOST RATE"]
+        VOICE["Input trim + Hi / Lo<br/>C1 and input loading"]
+        Q4["Q4 preamp<br/>Fixed feedback response<br/>and soft headroom"]
+        Q3["Loaded Sustain + Q3 clipper<br/>C4 · R24/R23 · C5/R19<br/>Fixed silicon feedback diodes"]
+        Q2["Q2 coupling + clipper<br/>C13/R12 + amplifier<br/>Off / Silicon / Germanium diodes"]
+        TONE["Passive Tone / High network<br/>C9/R5 bright arm · R8/C8 dark arm<br/>Tone wiper + C3 output coupling"]
+        Q1["Q1 recovery<br/>Soft headroom<br/>C2/R26 output coupling"]
+        VOICE --> Q4 --> Q3 --> Q2 --> TONE --> Q1
+    end
+
+    DOWN["Filtered downsampling + padding<br/>Six-sample reported wet latency<br/>2x gets two extra padding samples"]
+    GAIN["Host-rate linear output gain<br/>1/3 volts-to-digital × Volume<br/>× quality-transition fade"]
+    MIX["Native host bypass blend<br/>Dry ↔ wet · 5 ms transition<br/>Wet circuit keeps running"]
+    ROUTE["Output routing<br/>Mono → stereo: duplicate result<br/>Stereo → stereo: independent channels"]
+    OUTPUT["Output peak meter → host<br/>After bypass and routing"]
+
+    INPUT --> INM
+    INM --> UP
+    INM --> DRY
+    UP --> VOICE
+    Q1 --> DOWN --> GAIN --> MIX --> ROUTE --> OUTPUT
+    DRY -->|latency-aligned dry audio| MIX
+
+    classDef boundary fill:#edf2f8,stroke:#536880,color:#182b43;
+    classDef audio fill:#fff5dc,stroke:#a47b2b,color:#493612;
+    class INPUT,INM,OUTPUT,ROUTE boundary;
+    class DRY,UP,VOICE,Q4,Q3,Q2,TONE,Q1,DOWN,GAIN,MIX audio;
+    style CIRCUIT fill:#fffaf0,stroke:#c8ac70

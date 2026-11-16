@@ -13,9 +13,9 @@ retain those roles and their order.
 | Section | Schematic evidence | DSP implication |
 | --- | --- | --- |
 | Input | C1 10 uF, R1 2 MOhm, selectable R2 39 kOhm / R27 390 kOhm | Model the switch as source resistance and input attenuation/loading, rather than merely a fixed EQ crossfade. |
-| Q1 preamp | MPSA18, R13 10 kOhm collector, R22 1 kOhm emitter, R9 470 kOhm and C10 470 pF collector-to-base feedback | Use a gain stage with feedback-shaped bandwidth and modest headroom. |
-| First fuzz gain stage | 2N5089, R18 10 kOhm, R21 100 Ohm, R17 470 kOhm, C12 470 pF, D3/D4 1N914 feedback clipper | Use band-limited feedback-style silicon clipping; this is the first dense sustain generator. |
-| Second fuzz gain stage | 2N5089, R15 470 kOhm, R10 100 Ohm, R16 100 kOhm, C11 470 pF; selectable D1/D2 silicon, D6/D7 germanium, or no diodes | Off must remove only this stage's diode feedback. Silicon and germanium need distinct thresholds and knees, but retain the same gain-stage filtering. |
+| Q4 preamp | MPSA18, R13 10 kOhm collector, R22 1 kOhm emitter, R9 470 kOhm and C10 470 pF collector-to-base feedback | Use a gain stage with feedback-shaped bandwidth and modest headroom. |
+| First fuzz gain stage | 2N5089, R18 10 kOhm, R21 100 Ohm, R17 470 kOhm, C12 470 pF, C6 47 nF and D3/D4 1N914 feedback clipper | Use band-limited feedback-style silicon clipping; this is the first dense sustain generator. |
+| Second fuzz gain stage | 2N5089, R15 470 kOhm, R10 100 Ohm, R16 100 kOhm, C11 470 pF; C7 47 nF and selectable D1/D2 silicon, D5 versus D6+D7 germanium, or no diodes | Off must remove only this stage's diode feedback. Silicon and germanium need distinct thresholds and knees, but retain the same gain-stage filtering. |
 | Tone network | C9 0.01 uF, R5 470 kOhm, R25 Tone 250 kOhm, C8/R8 high-control branch | Implement a loaded, passive two-branch tone response; do not substitute a generic LP/HP blend plus a centre EQ scoop. |
 | Recovery | 2N5089, R7 470 kOhm, R6 10 kOhm, C2 10 uF, R26 Volume 100 kOhm | Apply recovery gain and output coupling after the passive level loss; reserve saturation for natural recovery-stage headroom. |
 
@@ -30,12 +30,25 @@ retain those roles and their order.
 
 ## Consequence for the current DSP
 
-The current engine has the correct broad order and keeps its nonlinear stages
-oversampled, but its fixed filter curves and transfer functions are not yet
-derived from this schematic. In particular, `ToneStack` is an EQ approximation,
-and `InputVoicingStage` models Hi/Lo as an EQ morph rather than the documented
-39 kOhm / 390 kOhm input resistance. Therefore it should currently be described
-as a schematic-inspired fuzz, not a replica of this circuit.
+The engine now derives input loading and Sustain placement from the schematic,
+solves the passive tone topology, and uses reduced nonlinear feedback models for
+the two clipping stages. C6/C7 retain capacitor memory, and germanium models the
+one-junction D5 branch versus the reverse two-junction D6+D7 branch. Off opens
+the diode branch while retaining the amplifier and resistor/capacitor feedback.
+The centre switch wiring is ambiguous relative to its ON/OFF/ON annotation;
+the open-branch interpretation follows the product brief.
+
+C13/R12 supplies interstage coupling, C3 appears once after the tone wiper, and
+C2 provides output coupling after recovery. Tone loading and recovery gain use
+nominal device calculations. All nonlinear stages run inside oversampling.
+
+This remains a reduced schematic-guided model: assumed device curves, nominal
+linear output impedances, fixed bias and soft headroom replace full transistor
+simulation. No measured-pedal calibration is claimed. The
+[baseline](baseline-review.md), [tone](tone-correction-review.md),
+[input/Sustain](input-sustain-review.md), and
+[clipping/recovery](clipping-recovery-review.md) reviews record each revision,
+its independent checks, retained builds and remaining assumptions.
 
 ## Implementation sequence
 

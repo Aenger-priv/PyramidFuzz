@@ -1,151 +1,102 @@
 #pragma once
 
-#include "DspUtilities.h"
-
+#include "InputCircuit.h"
 #include <array>
 
 namespace pyramidfuzz::dsp
 {
-// Trapezoidal/MNA model of the modified Ram's Head passive tone circuit.
-// Nodes: Q2 collector, C9 arm, C8/R8 arm, R25 wiper, and Q4 input.
+// Five-node passive tone network. Double TPT state preserves slow poles at 8x.
+// Cholesky factors are reused while Tone/High are unchanged.
 class ToneStack
 {
 public:
-    void prepare(double newSampleRate, int, int channels)
+    static double sourceResistance()
     {
-        sampleRate = newSampleRate;
-        states.resize(static_cast<size_t>(channels));
-        reset();
+        // Nominal Q2 source impedance with R12 plus nominal Q3 output resistance.
+        // Diode-dependent output impedance remains a block-model approximation.
+        const auto q = inputcircuit::firstClip();
+        return q.outputResistance(6200.0 + q.outputResistance(30000.0));
     }
-
-    void reset()
+    static double loadResistance() { return inputcircuit::operatingPoint(600.0, 2200.0).inputResistance(); }
+    void prepare(double rate, int, int channels)
     {
-        for (auto& state : states)
-            state = {};
+        states.assign(static_cast<size_t>(channels), {});
+        conductances = {2 * rate * 10e-9, 2 * rate * 22e-9, 2 * rate * 47e-9};
+        cachedTone = cachedHigh = -1;
     }
-
+    void reset() { for (auto& state : states) state = {}; }
     float processSample(int channel, float source, float tone, float high)
     {
-        auto& state = states[static_cast<size_t>(channel)];
-        Matrix matrix {};
+        if (!juce::exactlyEqual(tone, cachedTone) || !juce::exactlyEqual(high, cachedHigh)) update(tone, high);
+        auto& s = states[static_cast<size_t>(channel)];
         Vector rhs {};
-
-        constexpr auto collector = 0;
-        constexpr auto c9Arm = 1;
-        constexpr auto c8Arm = 2;
-        constexpr auto wiper = 3;
-        constexpr auto recoveryInput = 4;
-
-        // Q2 collector is represented by its 10 k collector resistor. C9/R5
-        // and C8/R8 are the two passive branches; C3 couples the pot wiper
-        // to the recovery transistor's input impedance.
-        addResistorToKnownVoltage(matrix, rhs, collector, 10000.0f, source);
-        addResistorToGround(matrix, c9Arm, 470000.0f); // R5
-
-        // R8 uses lugs 1 and 2, making it a 0-25 k rheostat. Higher UI values
-        // reduce shunt loss and therefore increase the audible high branch.
-        const auto r8 = juce::jmax(20.0f, (1.0f - juce::jlimit(0.0f, 1.0f, high)) * 25000.0f);
-        addResistorToGround(matrix, c8Arm, r8);
-        addResistorToGround(matrix, recoveryInput, 220000.0f);
-
-        constexpr auto potResistance = 250000.0f;
-        constexpr auto endStopResistance = 30.0f;
-        const auto position = juce::jlimit(0.0f, 1.0f, tone);
-        addResistor(matrix, c9Arm, wiper, juce::jmax(endStopResistance, position * potResistance));
-        addResistor(matrix, c8Arm, wiper, juce::jmax(endStopResistance, (1.0f - position) * potResistance));
-
-        stampCapacitor(matrix, rhs, collector, c9Arm, 0.01e-6f, state.c9);
-        stampCapacitor(matrix, rhs, collector, c8Arm, 0.022e-6f, state.c8);
-        stampCapacitor(matrix, rhs, wiper, recoveryInput, 0.047e-6f, state.c3);
-
-        const auto voltages = solve(matrix, rhs);
-        updateCapacitor(state.c9, voltages[collector] - voltages[c9Arm], 0.01e-6f);
-        updateCapacitor(state.c8, voltages[collector] - voltages[c8Arm], 0.022e-6f);
-        updateCapacitor(state.c3, voltages[wiper] - voltages[recoveryInput], 0.047e-6f);
-        return clampAudio(voltages[recoveryInput]);
-    }
-
-private:
-    static constexpr auto nodeCount = 5;
-    using Matrix = std::array<std::array<float, nodeCount>, nodeCount>;
-    using Vector = std::array<float, nodeCount>;
-
-    struct CapacitorState { float voltage {}; float current {}; };
-    struct ChannelState { CapacitorState c9, c8, c3; };
-
-    static void addResistorToGround(Matrix& matrix, int node, float resistance)
-    {
-        matrix[static_cast<size_t>(node)][static_cast<size_t>(node)] += 1.0f / resistance;
-    }
-
-    static void addResistorToKnownVoltage(Matrix& matrix, Vector& rhs, int node, float resistance, float voltage)
-    {
-        const auto conductance = 1.0f / resistance;
-        matrix[static_cast<size_t>(node)][static_cast<size_t>(node)] += conductance;
-        rhs[static_cast<size_t>(node)] += conductance * voltage;
-    }
-
-    static void addResistor(Matrix& matrix, int first, int second, float resistance)
-    {
-        const auto conductance = 1.0f / resistance;
-        matrix[static_cast<size_t>(first)][static_cast<size_t>(first)] += conductance;
-        matrix[static_cast<size_t>(second)][static_cast<size_t>(second)] += conductance;
-        matrix[static_cast<size_t>(first)][static_cast<size_t>(second)] -= conductance;
-        matrix[static_cast<size_t>(second)][static_cast<size_t>(first)] -= conductance;
-    }
-
-    void stampCapacitor(Matrix& matrix, Vector& rhs, int first, int second, float capacitance, const CapacitorState& state) const
-    {
-        const auto conductance = 2.0f * capacitance * static_cast<float>(sampleRate);
-        const auto historyCurrent = -conductance * state.voltage - state.current;
-        matrix[static_cast<size_t>(first)][static_cast<size_t>(first)] += conductance;
-        matrix[static_cast<size_t>(second)][static_cast<size_t>(second)] += conductance;
-        matrix[static_cast<size_t>(first)][static_cast<size_t>(second)] -= conductance;
-        matrix[static_cast<size_t>(second)][static_cast<size_t>(first)] -= conductance;
-        rhs[static_cast<size_t>(first)] -= historyCurrent;
-        rhs[static_cast<size_t>(second)] += historyCurrent;
-    }
-
-    void updateCapacitor(CapacitorState& state, float voltage, float capacitance) const
-    {
-        const auto conductance = 2.0f * capacitance * static_cast<float>(sampleRate);
-        const auto historyCurrent = -conductance * state.voltage - state.current;
-        state.current = conductance * voltage + historyCurrent;
-        state.voltage = voltage;
-    }
-
-    static Vector solve(Matrix matrix, Vector rhs)
-    {
-        for (auto pivot = 0; pivot < nodeCount; ++pivot)
+        rhs[0] = source / sourceResistanceValue;
+        for (size_t c = 0; c < 3; ++c)
         {
-            auto best = pivot;
-            for (auto row = pivot + 1; row < nodeCount; ++row)
-                if (std::abs(matrix[static_cast<size_t>(row)][static_cast<size_t>(pivot)]) > std::abs(matrix[static_cast<size_t>(best)][static_cast<size_t>(pivot)]))
-                    best = row;
-            std::swap(matrix[static_cast<size_t>(pivot)], matrix[static_cast<size_t>(best)]);
-            std::swap(rhs[static_cast<size_t>(pivot)], rhs[static_cast<size_t>(best)]);
-
-            const auto value = matrix[static_cast<size_t>(pivot)][static_cast<size_t>(pivot)];
-            if (std::abs(value) < 1.0e-12f)
-                return {};
-            for (auto column = pivot; column < nodeCount; ++column)
-                matrix[static_cast<size_t>(pivot)][static_cast<size_t>(column)] /= value;
-            rhs[static_cast<size_t>(pivot)] /= value;
-
-            for (auto row = 0; row < nodeCount; ++row)
-            {
-                if (row == pivot)
-                    continue;
-                const auto factor = matrix[static_cast<size_t>(row)][static_cast<size_t>(pivot)];
-                for (auto column = pivot; column < nodeCount; ++column)
-                    matrix[static_cast<size_t>(row)][static_cast<size_t>(column)] -= factor * matrix[static_cast<size_t>(pivot)][static_cast<size_t>(column)];
-                rhs[static_cast<size_t>(row)] -= factor * rhs[static_cast<size_t>(pivot)];
-            }
+            const double history = -conductances[c] * s[c].voltage - s[c].current;
+            rhs[size_t(first[c])] -= history;
+            if (second[c] >= 0) rhs[size_t(second[c])] += history;
         }
-        return rhs;
+        // G = L L^T, with positive diagonal guaranteed by passive resistances.
+        Vector voltage {};
+        for (size_t row = 0; row < 5; ++row)
+        {
+            double value = rhs[row];
+            for (size_t col = 0; col < row; ++col) value -= lower[row][col] * voltage[col];
+            voltage[row] = value / lower[row][row];
+        }
+        for (int row = 4; row >= 0; --row)
+        {
+            double value = voltage[size_t(row)];
+            for (int col = row + 1; col < 5; ++col) value -= lower[size_t(col)][size_t(row)] * voltage[size_t(col)];
+            voltage[size_t(row)] = value / lower[size_t(row)][size_t(row)];
+        }
+        for (size_t c = 0; c < 3; ++c)
+        {
+            const double v = voltage[size_t(first[c])] - (second[c] < 0 ? 0 : voltage[size_t(second[c])]);
+            s[c].current = conductances[c] * (v - s[c].voltage) - s[c].current;
+            s[c].voltage = v;
+        }
+        return static_cast<float>(voltage[4]);
     }
-
-    double sampleRate { 44100.0 };
-    std::vector<ChannelState> states;
+private:
+    using Vector = std::array<double, 5>;
+    using Matrix = std::array<Vector, 5>;
+    struct Capacitor { double voltage = 0, current = 0; };
+    static constexpr std::array<int, 3> first {0, 2, 3}, second {1, -1, 4};
+    void update(float tone, float high)
+    {
+        cachedTone = tone; cachedHigh = high;
+        Matrix matrix {};
+        const auto stamp = [&](int a, int b, double g)
+        {
+            matrix[size_t(a)][size_t(a)] += g;
+            if (b < 0) return;
+            matrix[size_t(b)][size_t(b)] += g;
+            matrix[size_t(a)][size_t(b)] -= g; matrix[size_t(b)][size_t(a)] -= g;
+        };
+        sourceResistanceValue = sourceResistance();
+        stamp(0, -1, 1.0 / sourceResistanceValue);
+        stamp(1, -1, 1.0 / 470000.0); // R5
+        stamp(4, -1, 1.0 / loadResistance());
+        stamp(0, 2, 1.0 / std::max(20.0, (1 - std::clamp(double(high), 0.0, 1.0)) * 25000));
+        const double t = std::clamp(double(tone), 0.0, 1.0);
+        stamp(1, 3, 1.0 / std::max(30.0, (1 - t) * 250000));
+        stamp(2, 3, 1.0 / std::max(30.0, t * 250000));
+        for (size_t c = 0; c < 3; ++c) stamp(first[c], second[c], conductances[c]);
+        lower = {};
+        for (size_t row = 0; row < 5; ++row)
+            for (size_t col = 0; col <= row; ++col)
+            {
+                double value = matrix[row][col];
+                for (size_t k = 0; k < col; ++k) value -= lower[row][k] * lower[col][k];
+                lower[row][col] = row == col ? std::sqrt(value) : value / lower[col][col];
+            }
+    }
+    double sourceResistanceValue = 10000;
+    float cachedTone = -1, cachedHigh = -1;
+    std::array<double, 3> conductances {};
+    Matrix lower {};
+    std::vector<std::array<Capacitor, 3>> states;
 };
-} // namespace pyramidfuzz::dsp
+}
